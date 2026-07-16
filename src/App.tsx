@@ -37,7 +37,9 @@ import {
   AlertCircle,
   HelpCircle,
   RefreshCw,
-  Activity
+  Activity,
+  Cpu,
+  TrendingUp
 } from "lucide-react";
 
 // Types
@@ -229,6 +231,7 @@ export default function App() {
   const [isLogRunning, setIsLogRunning] = useState(true);
   const [terminalInput, setTerminalInput] = useState("");
   const terminalBottomRef = useRef<HTMLDivElement>(null);
+  const bottomTerminalBottomRef = useRef<HTMLDivElement>(null);
 
   // Financial status states
   const totalBudgetLimit = 100000;
@@ -237,12 +240,17 @@ export default function App() {
   const totalSpent = agents.reduce((acc, current) => acc + current.budget, 0);
   const hiringCreditsRemaining = availableFunds;
 
-  // Auto scroll terminal
+  // Auto scroll terminal (only when Live tab is active to avoid disrupting other pages)
   useEffect(() => {
-    if (terminalBottomRef.current) {
-      terminalBottomRef.current.scrollIntoView({ behavior: "smooth" });
+    if (activeTab === "live") {
+      if (terminalBottomRef.current) {
+        terminalBottomRef.current.scrollIntoView({ behavior: "smooth" });
+      }
+      if (bottomTerminalBottomRef.current) {
+        bottomTerminalBottomRef.current.scrollIntoView({ behavior: "smooth" });
+      }
     }
-  }, [logs]);
+  }, [logs, activeTab]);
 
   // Preset live logs to generate
   const logPool = [
@@ -261,6 +269,7 @@ export default function App() {
 
   // Simulated live logs addition
   useEffect(() => {
+    if (activeTab !== "live") return;
     if (!isLogRunning) return;
 
     const interval = setInterval(() => {
@@ -293,10 +302,11 @@ export default function App() {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [isLogRunning]);
+  }, [isLogRunning, activeTab]);
 
   // Universal Paperclips Incremental Simulation Loop
   useEffect(() => {
+    if (activeTab !== "live") return;
     const interval = setInterval(() => {
       // Calculate active working agents
       const activeWorkingAgents = agents.filter(a => a.status === "WORKING").length;
@@ -355,7 +365,7 @@ export default function App() {
     }, 1500);
 
     return () => clearInterval(interval);
-  }, [agents, processors, memoryGb, marketingLevel, operationPrice]);
+  }, [agents, processors, memoryGb, marketingLevel, operationPrice, activeTab]);
 
   // Save theme helper
   const handleThemeChange = (newTheme: ThemeMode) => {
@@ -890,7 +900,7 @@ export default function App() {
             }`}
           >
             <Layers className="w-5 h-5 mr-3 text-blue-500" />
-            Orchestrator
+            Orquestrador
           </button>
 
           <button
@@ -914,7 +924,7 @@ export default function App() {
             }`}
           >
             <Users className="w-5 h-5 mr-3 text-purple-500" />
-            Active Agents
+            Agentes Ativos
             <span className="ml-auto bg-slate-800 text-[10px] px-2 py-0.5 rounded-full text-white">{agents.length}</span>
           </button>
 
@@ -935,17 +945,17 @@ export default function App() {
             }`}
           >
             <Settings className="w-5 h-5 mr-3 text-amber-500" />
-            Settings & Themes
+            Configurações & Temas
           </button>
         </nav>
 
         {/* Sidebar Footer Info */}
         <div className="mt-auto pt-6 border-t border-slate-800/40">
           <div className={`p-4 rounded-2xl ${themeStyles.statOverlay}`}>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Hiring Credits</p>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Créditos de Contratação</p>
             <div className="flex items-end justify-between">
               <span className="text-xl font-extrabold font-mono">${hiringCreditsRemaining.toLocaleString()}</span>
-              <span className="text-xs text-emerald-400 font-bold">Active</span>
+              <span className="text-xs text-emerald-400 font-bold">Ativo</span>
             </div>
             <div className="w-full h-1.5 bg-slate-700/60 rounded-full mt-3 overflow-hidden">
               <div 
@@ -1615,6 +1625,384 @@ export default function App() {
             </div>
           )}
 
+          {/* LIVE CONSOLE & PAPERCLIP ORCHESTRATOR TAB */}
+          {activeTab === "live" && (
+            <div className="space-y-6">
+              
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="text-xl font-bold font-mono tracking-tight text-white flex items-center">
+                    <span className="w-3 h-3 bg-red-500 rounded-full mr-3 animate-ping"></span>
+                    Terminal de Comando & Console de Silício
+                  </h2>
+                  <p className="text-xs text-slate-400 font-mono mt-1">
+                    Orquestração neural em tempo real, telemetria de microsserviços e simulação de manufatura de clipes.
+                  </p>
+                </div>
+                
+                <div className="flex items-center space-x-3 bg-slate-900 border border-slate-800 p-1 rounded-xl">
+                  <button
+                    onClick={() => setIsLogRunning(!isLogRunning)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all flex items-center gap-1.5 ${
+                      isLogRunning 
+                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                        : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                    }`}
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${isLogRunning ? "bg-emerald-400 animate-pulse" : "bg-amber-400"}`}></span>
+                    {isLogRunning ? "STREAMING ATIVO" : "CONEXÃO PAUSADA"}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setLogs([
+                        {
+                          id: `log-clear-${Date.now()}`,
+                          timestamp: new Date().toTimeString().split(" ")[0],
+                          type: "INFO",
+                          message: "Console limpo pelo operador de silício.",
+                        }
+                      ]);
+                    }}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/60 rounded-lg text-xs font-mono transition-all"
+                  >
+                    LIMPAR CONSOLE
+                  </button>
+                </div>
+              </div>
+
+              {/* THREE COLUMN COMMAND GRID */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* COL-1: UNIVERSAL PAPERCLIP CORE MANUFACTURING PANEL (4/12 width) */}
+                <div className="lg:col-span-4 space-y-6 font-mono">
+                  <div className={`p-6 rounded-2xl ${themeStyles.card} space-y-5 border border-slate-800`}>
+                    <div className="border-b border-slate-800 pb-3 flex justify-between items-center">
+                      <div>
+                        <h3 className="text-sm font-bold flex items-center text-slate-200">
+                          <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full mr-2.5 animate-pulse"></span>
+                          FABRICADOR v2.1
+                        </h3>
+                        <p className="text-[10px] text-slate-500 mt-0.5">Demanda de Silício & Sincronização</p>
+                      </div>
+                      <span className="text-[9px] bg-slate-950 px-2 py-0.5 rounded border border-slate-800 text-slate-400">ACTIVE</span>
+                    </div>
+
+                    {/* CLIPS COMPUTED STAT */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-end">
+                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Clipes Fabricados:</span>
+                        <span className="text-2xl font-extrabold text-white animate-pulse">{clipsComputed.toLocaleString()}</span>
+                      </div>
+                      
+                      <button
+                        onClick={() => {
+                          setClipsComputed(prev => prev + 1);
+                          setAvailableFunds(prev => prev + 15);
+                          setLogs(prev => [
+                            ...prev,
+                            {
+                              id: `log-clip-${Date.now()}`,
+                              timestamp: new Date().toTimeString().split(" ")[0],
+                              type: "SYNC",
+                              message: "Clipes fabricados manualmente. +$15 adicionados à carteira.",
+                            }
+                          ]);
+                        }}
+                        className="w-full py-2.5 bg-slate-950 hover:bg-slate-900 border border-emerald-500/30 hover:border-emerald-500/60 text-emerald-400 text-xs rounded-xl font-bold transition-all cursor-pointer active:translate-y-0.5 flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(16,185,129,0.05)]"
+                      >
+                        <span>[ Fabricar Clipes Ativo ]</span>
+                        <span className="text-[9px] bg-emerald-500/20 px-1.5 py-0.5 rounded text-emerald-400 font-extrabold border border-emerald-500/20">+$15 Funds</span>
+                      </button>
+                    </div>
+
+                    {/* TELEMETRY METRICS */}
+                    <div className="space-y-3.5 pt-2 border-t border-slate-800/60">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-400">Poder de Operação:</span>
+                        <span className="text-white font-extrabold">{operationsStored.toLocaleString()} / {maxOperations.toLocaleString()} Ops</span>
+                      </div>
+                      <div className="w-full bg-slate-950 h-2 rounded-full overflow-hidden border border-slate-800/80">
+                        <div 
+                          className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full transition-all duration-300"
+                          style={{ width: `${(operationsStored / maxOperations) * 100}%` }}
+                        ></div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-1">
+                        <div className="bg-slate-950/40 border border-slate-900 p-2 rounded-xl">
+                          <span className="text-[9px] text-slate-500 block uppercase">Processadores</span>
+                          <span className="text-sm font-bold text-slate-300 font-mono">{processors} Cores</span>
+                        </div>
+                        <div className="bg-slate-950/40 border border-slate-900 p-2 rounded-xl">
+                          <span className="text-[9px] text-slate-500 block uppercase">Memória Sólida</span>
+                          <span className="text-sm font-bold text-slate-300 font-mono">{memoryGb} GB</span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs pt-1">
+                        <span className="text-slate-400">Nível de Marketing:</span>
+                        <span className="font-bold text-slate-200">Level {marketingLevel}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-400">Demanda Pública:</span>
+                        <span className="font-bold text-emerald-400">{clipDemand}%</span>
+                      </div>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-400">Estoque Não Vendido:</span>
+                        <span className="font-bold text-amber-500">{unsoldInventory.toLocaleString()} unidades</span>
+                      </div>
+                    </div>
+
+                    {/* UPGRADE HARDWARE BUTTONS */}
+                    <div className="space-y-2.5 pt-4 border-t border-slate-800">
+                      <div className="flex justify-between items-center text-[11px] text-slate-400 font-bold uppercase tracking-wider">
+                        <span>Melhoria de Silício:</span>
+                        <span className="text-[10px] text-slate-500">Requer Ops / Funds</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <button
+                          onClick={() => {
+                            if (availableFunds >= 120) {
+                              setAvailableFunds(prev => prev - 120);
+                              setProcessors(prev => prev + 1);
+                              setLogs(prev => [
+                                ...prev,
+                                {
+                                  id: `log-processor-${Date.now()}`,
+                                  timestamp: new Date().toTimeString().split(" ")[0],
+                                  type: "SUCCESS",
+                                  message: `Processador físico integrado com sucesso. Núcleos ativos: ${processors + 1}.`,
+                                }
+                              ]);
+                            }
+                          }}
+                          disabled={availableFunds < 120}
+                          className="w-full py-2 bg-slate-950 disabled:opacity-40 hover:brightness-110 border border-slate-800 text-slate-300 text-xs rounded-xl transition-all cursor-pointer active:translate-y-0.5 flex items-center justify-between px-3"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Plus className="w-3.5 h-3.5 text-blue-400" />
+                            <span>Adicionar Processador</span>
+                          </span>
+                          <span className="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-emerald-400 font-bold">$120</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (availableFunds >= 180) {
+                              setAvailableFunds(prev => prev - 180);
+                              setMemoryGb(prev => prev + 16);
+                              setMaxOperations(prev => prev + 500);
+                              setLogs(prev => [
+                                ...prev,
+                                {
+                                  id: `log-mem-${Date.now()}`,
+                                  timestamp: new Date().toTimeString().split(" ")[0],
+                                  type: "SUCCESS",
+                                  message: `Memória quântica expandida em +16GB. Armazenamento de Ops máximo: ${maxOperations + 500}.`,
+                                }
+                              ]);
+                            }
+                          }}
+                          disabled={availableFunds < 180}
+                          className="w-full py-2 bg-slate-950 disabled:opacity-40 hover:brightness-110 border border-slate-800 text-slate-300 text-xs rounded-xl transition-all cursor-pointer active:translate-y-0.5 flex items-center justify-between px-3"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>Comprar Memória (+16GB)</span>
+                          </span>
+                          <span className="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-emerald-400 font-bold">$180</span>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            if (operationsStored >= 800) {
+                              setOperationsStored(prev => prev - 800);
+                              setClipDemand(prev => prev + 12);
+                              setMarketingLevel(prev => prev + 1);
+                              setLogs(prev => [
+                                ...prev,
+                                {
+                                  id: `log-mktg-${Date.now()}`,
+                                  timestamp: new Date().toTimeString().split(" ")[0],
+                                  type: "SYNC",
+                                  message: `Algoritmo de Demanda atualizado para o Level ${marketingLevel + 1}. Demanda pública elevada para ${clipDemand + 12}%.`,
+                                }
+                              ]);
+                            }
+                          }}
+                          disabled={operationsStored < 800}
+                          className="w-full py-2 bg-slate-950 disabled:opacity-40 hover:brightness-110 border border-slate-800 text-slate-300 text-xs rounded-xl transition-all cursor-pointer active:translate-y-0.5 flex items-center justify-between px-3"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <TrendingUp className="w-3.5 h-3.5 text-pink-400" />
+                            <span>Upgrade de Algoritmo</span>
+                          </span>
+                          <span className="text-[9px] bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-blue-400 font-bold">800 Ops</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* COL-2: LOG CONSOLE & COMMAND INPUT (8/12 width) */}
+                <div className="lg:col-span-8 space-y-6">
+                  
+                  {/* METRIC SUB-GRID FOR REALTIME RUNNING THREADS */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+                    <div className="p-4 bg-slate-950 border border-slate-900 rounded-2xl">
+                      <span className="text-[9px] text-slate-500 block uppercase">Uso de CPU de Agentes</span>
+                      <span className="text-lg font-bold text-white mt-1 block">
+                        {agents.filter(a => a.status === "WORKING").length * 18.5 + 4.2}%
+                      </span>
+                      <div className="w-full bg-slate-900 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div 
+                          className="bg-purple-500 h-full transition-all duration-500" 
+                          style={{ width: `${agents.filter(a => a.status === "WORKING").length * 18.5 + 4.2}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 bg-slate-950 border border-slate-900 rounded-2xl">
+                      <span className="text-[9px] text-slate-500 block uppercase">Taxa de Conclusão</span>
+                      <span className="text-lg font-bold text-white mt-1 block">
+                        {tasks.length > 0 ? Math.round((tasks.filter(t => t.status === "DONE").length / tasks.length) * 100) : 0}%
+                      </span>
+                      <div className="w-full bg-slate-900 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div 
+                          className="bg-emerald-500 h-full transition-all duration-500" 
+                          style={{ width: `${tasks.length > 0 ? Math.round((tasks.filter(t => t.status === "DONE").length / tasks.length) * 100) : 0}%` }}
+                        ></div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-slate-950 border border-slate-900 rounded-2xl">
+                      <span className="text-[9px] text-slate-500 block uppercase">Threads Ativas</span>
+                      <span className="text-lg font-bold text-white mt-1 block">
+                        {agents.length} Threads <span className="text-xs text-slate-500">({agents.filter(a => a.status === "WORKING").length} live)</span>
+                      </span>
+                      <div className="w-full bg-slate-900 h-1.5 rounded-full mt-2 overflow-hidden">
+                        <div 
+                          className="bg-indigo-500 h-full transition-all duration-500" 
+                          style={{ width: `${(agents.filter(a => a.status === "WORKING").length / agents.length) * 100}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* LOG CONTAINER PANEL */}
+                  <div className="bg-slate-950 border border-slate-900 rounded-2xl overflow-hidden shadow-2xl flex flex-col h-[480px]">
+                    <div className="bg-slate-900 px-4 py-3 border-b border-slate-800 flex items-center justify-between font-mono text-xs text-slate-400">
+                      <div className="flex items-center space-x-2">
+                        <div className="flex space-x-1">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500/80"></span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></span>
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80"></span>
+                        </div>
+                        <span className="text-[11px] font-bold text-slate-300">bash • /system/orquestrador_logs</span>
+                      </div>
+                      <div className="text-[10px] text-slate-500">
+                        STREAMING DISPATCHER V4
+                      </div>
+                    </div>
+
+                    {/* LOG SCRIPTS TERMINAL VIEW */}
+                    <div className="flex-1 p-4 overflow-y-auto font-mono text-[11px] space-y-2.5 select-text selection:bg-indigo-500/30 selection:text-white">
+                      {logs.map((log) => {
+                        let badgeColor = "bg-slate-800 text-slate-400 border-slate-700/50";
+                        if (log.type === "INFO") badgeColor = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+                        if (log.type === "SYNC") badgeColor = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                        if (log.type === "TASK") badgeColor = "bg-purple-500/10 text-purple-400 border-purple-500/20";
+                        if (log.type === "SUCCESS") badgeColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                        if (log.type === "ERROR") badgeColor = "bg-red-500/10 text-red-400 border-red-500/20";
+
+                        return (
+                          <div key={log.id} className="flex items-start gap-2 leading-relaxed transition-all hover:bg-slate-900/40 p-1 rounded">
+                            <span className="text-slate-600 select-none">{log.timestamp}</span>
+                            <span className={`px-1.5 py-0.5 text-[9px] rounded font-bold uppercase border ${badgeColor} select-none shrink-0`}>
+                              {log.type}
+                            </span>
+                            <span className="text-slate-300 tracking-wide text-left">{log.message}</span>
+                          </div>
+                        );
+                      })}
+                      <div ref={terminalBottomRef}></div>
+                    </div>
+
+                    {/* TERMINAL INPUT FOR INTERACTIVE FEEL */}
+                    <div className="p-3 bg-slate-900/60 border-t border-slate-800 flex items-center space-x-2">
+                      <span className="text-indigo-400 font-mono text-xs select-none pl-1">$</span>
+                      <input
+                        type="text"
+                        value={terminalInput}
+                        onChange={(e) => setTerminalInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && terminalInput.trim()) {
+                            const inputCmd = terminalInput.trim();
+                            const now = new Date();
+                            const timeStr = now.toTimeString().split(" ")[0];
+                            
+                            // Process user command and reply
+                            let reply = `Instrução desconhecida: '${inputCmd}'. Digite 'help' para comandos de console de silício.`;
+                            let cmdType: "INFO" | "SUCCESS" | "ERROR" | "SYNC" | "TASK" = "ERROR";
+
+                            if (inputCmd.toLowerCase() === "help") {
+                              reply = "Comandos disponíveis: help (ajuda), build (fabricar clipes), upgrade (processadores), op (gerar Ops), clear (limpar).";
+                              cmdType = "INFO";
+                            } else if (inputCmd.toLowerCase() === "build") {
+                              setClipsComputed(prev => prev + 10);
+                              reply = "Produção acelerada iniciada: +10 clipes adicionados à contagem.";
+                              cmdType = "SUCCESS";
+                            } else if (inputCmd.toLowerCase() === "clear") {
+                              setLogs([
+                                {
+                                  id: `log-user-clear-${Date.now()}`,
+                                  timestamp: timeStr,
+                                  type: "INFO",
+                                  message: "Console limpo.",
+                                }
+                              ]);
+                              setTerminalInput("");
+                              return;
+                            } else if (inputCmd.toLowerCase() === "upgrade") {
+                              setProcessors(p => p + 1);
+                              reply = "Hardware escalado com sucesso: +1 Core adicionado ao processamento.";
+                              cmdType = "SUCCESS";
+                            } else if (inputCmd.toLowerCase() === "op") {
+                              setOperationsStored(prev => Math.min(maxOperations, prev + 250));
+                              reply = "Carga estática de silício injetada: +250 Ops armazenados.";
+                              cmdType = "SYNC";
+                            }
+
+                            setLogs((prev) => [
+                              ...prev,
+                              {
+                                id: `log-user-${Date.now()}`,
+                                timestamp: timeStr,
+                                type: "SYNC",
+                                message: `Usuário executou comando: "${inputCmd}"`,
+                              },
+                              {
+                                id: `log-reply-${Date.now()}`,
+                                timestamp: timeStr,
+                                type: cmdType,
+                                message: reply,
+                              }
+                            ]);
+                            setTerminalInput("");
+                          }
+                        }}
+                        placeholder="Digite comandos de silício (ex: 'help', 'build', 'op', 'upgrade') e pressione Enter..."
+                        className="flex-1 bg-transparent border-none outline-none text-white text-xs font-mono placeholder-slate-500"
+                      />
+                      <span className="text-[10px] text-slate-500 font-mono pr-1 select-none">Enter para rodar</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ACTIVE AGENTS TAB */}
           {activeTab === "agents" && (
             <div className="space-y-6">
@@ -2115,89 +2503,91 @@ export default function App() {
         </main>
 
         {/* LIVE SIMULATION TERMINAL BOTTOM PANEL */}
-        <div className={`shrink-0 p-4 font-mono flex flex-col border-t ${themeStyles.terminalBg}`}>
-          
-          <div className="flex items-center justify-between mb-2.5 px-1">
-            <div className="flex items-center space-x-3 text-[10px] uppercase font-bold text-slate-400">
-              <span className="flex items-center text-blue-400">
-                <span className={`w-2.5 h-2.5 rounded-full mr-2 bg-blue-500 ${isLogRunning ? "animate-pulse" : ""}`}></span>
-                ● LIVE COGNITIVE SIMULATOR
-              </span>
-              <span>•</span>
-              <span>Vazão: 4.86 task/sec</span>
-              <span>•</span>
-              <span>Cluster: XR-921</span>
+        {activeTab === "live" && (
+          <div className={`shrink-0 p-4 font-mono flex flex-col border-t ${themeStyles.terminalBg}`}>
+            
+            <div className="flex items-center justify-between mb-2.5 px-1">
+              <div className="flex items-center space-x-3 text-[10px] uppercase font-bold text-slate-400">
+                <span className="flex items-center text-blue-400">
+                  <span className={`w-2.5 h-2.5 rounded-full mr-2 bg-blue-500 ${isLogRunning ? "animate-pulse" : ""}`}></span>
+                  ● LIVE COGNITIVE SIMULATOR
+                </span>
+                <span>•</span>
+                <span>Vazão: 4.86 task/sec</span>
+                <span>•</span>
+                <span>Cluster: XR-921</span>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setIsLogRunning(!isLogRunning)}
+                  className="p-1 px-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded text-[10px] uppercase font-bold flex items-center space-x-1 transition-all"
+                  title={isLogRunning ? "Pausar Logs" : "Retomar Logs"}
+                >
+                  {isLogRunning ? (
+                    <>
+                      <Pause className="w-3 h-3 text-amber-400 mr-1" /> Pausar Emulação
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-3 h-3 text-emerald-400 mr-1" /> Retomar Emulação
+                    </>
+                  )}
+                </button>
+                
+                <button
+                  onClick={() => setLogs([])}
+                  className="p-1 px-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded text-[10px] uppercase font-bold transition-all"
+                >
+                  Clear
+                </button>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setIsLogRunning(!isLogRunning)}
-                className="p-1 px-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded text-[10px] uppercase font-bold flex items-center space-x-1 transition-all"
-                title={isLogRunning ? "Pausar Logs" : "Retomar Logs"}
-              >
-                {isLogRunning ? (
-                  <>
-                    <Pause className="w-3 h-3 text-amber-400 mr-1" /> Pausar Emulação
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3 h-3 text-emerald-400 mr-1" /> Retomar Emulação
-                  </>
-                )}
-              </button>
-              
-              <button
-                onClick={() => setLogs([])}
-                className="p-1 px-2.5 bg-slate-800/80 hover:bg-slate-700 text-slate-300 rounded text-[10px] uppercase font-bold transition-all"
-              >
-                Clear
-              </button>
+            {/* LOG CONTAINER ROW */}
+            <div className="bg-black/60 rounded-xl p-3 h-36 overflow-y-auto border border-slate-800/60 flex flex-col space-y-1.5 scroll-smooth text-[11px] leading-relaxed">
+              {logs.length === 0 ? (
+                <p className="text-slate-500 italic text-center my-auto">Sem logs carregados. Digite um comando ou espere a emulação iniciar.</p>
+              ) : (
+                logs.map((log) => {
+                  let badgeColor = "text-blue-400";
+                  if (log.type === "SUCCESS") badgeColor = "text-emerald-400";
+                  if (log.type === "ERROR") badgeColor = "text-red-500 font-extrabold";
+                  if (log.type === "SYNC") badgeColor = "text-purple-400";
+                  if (log.type === "TASK") badgeColor = "text-pink-400";
+
+                  return (
+                    <div key={log.id} className="flex items-start space-x-2 border-b border-white/5 pb-1 font-mono hover:bg-white/5 px-1 rounded transition-all">
+                      <span className="text-slate-500 shrink-0 select-none">[{log.timestamp}]</span>
+                      <span className={`uppercase font-bold shrink-0 select-none [${badgeColor}]`}>[{log.type}]</span>
+                      <span className="text-slate-200">{log.message}</span>
+                    </div>
+                  );
+                })
+              )}
+              <div ref={bottomTerminalBottomRef} />
             </div>
+
+            {/* TERMINAL INPUT FOR INTERACTIVE COMMANDS */}
+            <form onSubmit={handleTerminalSubmit} className="mt-2 flex items-center bg-black/80 rounded-lg overflow-hidden border border-slate-800/80">
+              <span className="pl-3 pr-1 text-slate-500 font-mono text-xs select-none">orchestrator@rotalabs:~#</span>
+              <input
+                type="text"
+                value={terminalInput}
+                onChange={(e) => setTerminalInput(e.target.value)}
+                placeholder="Digite um comando terminal (ex: 'help', 'status', 'agents', 'hire', 'pause')..."
+                className="flex-1 bg-transparent border-0 outline-none p-2 text-xs font-mono text-white placeholder-slate-600 focus:ring-0"
+              />
+              <button
+                type="submit"
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] uppercase font-bold p-2 px-4 transition-all"
+              >
+                Exec
+              </button>
+            </form>
+
           </div>
-
-          {/* LOG CONTAINER ROW */}
-          <div className="bg-black/60 rounded-xl p-3 h-36 overflow-y-auto border border-slate-800/60 flex flex-col space-y-1.5 scroll-smooth text-[11px] leading-relaxed">
-            {logs.length === 0 ? (
-              <p className="text-slate-500 italic text-center my-auto">Sem logs carregados. Digite um comando ou espere a emulação iniciar.</p>
-            ) : (
-              logs.map((log) => {
-                let badgeColor = "text-blue-400";
-                if (log.type === "SUCCESS") badgeColor = "text-emerald-400";
-                if (log.type === "ERROR") badgeColor = "text-red-500 font-extrabold";
-                if (log.type === "SYNC") badgeColor = "text-purple-400";
-                if (log.type === "TASK") badgeColor = "text-pink-400";
-
-                return (
-                  <div key={log.id} className="flex items-start space-x-2 border-b border-white/5 pb-1 font-mono hover:bg-white/5 px-1 rounded transition-all">
-                    <span className="text-slate-500 shrink-0 select-none">[{log.timestamp}]</span>
-                    <span className={`uppercase font-bold shrink-0 select-none [${badgeColor}]`}>[{log.type}]</span>
-                    <span className="text-slate-200">{log.message}</span>
-                  </div>
-                );
-              })
-            )}
-            <div ref={terminalBottomRef} />
-          </div>
-
-          {/* TERMINAL INPUT FOR INTERACTIVE COMMANDS */}
-          <form onSubmit={handleTerminalSubmit} className="mt-2 flex items-center bg-black/80 rounded-lg overflow-hidden border border-slate-800/80">
-            <span className="pl-3 pr-1 text-slate-500 font-mono text-xs select-none">orchestrator@rotalabs:~#</span>
-            <input
-              type="text"
-              value={terminalInput}
-              onChange={(e) => setTerminalInput(e.target.value)}
-              placeholder="Digite um comando terminal (ex: 'help', 'status', 'agents', 'hire', 'pause')..."
-              className="flex-1 bg-transparent border-0 outline-none p-2 text-xs font-mono text-white placeholder-slate-600 focus:ring-0"
-            />
-            <button
-              type="submit"
-              className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] uppercase font-bold p-2 px-4 transition-all"
-            >
-              Exec
-            </button>
-          </form>
-
-        </div>
+        )}
 
       </div>
 
@@ -2210,7 +2600,7 @@ export default function App() {
           }`}
         >
           <Layers className="w-5 h-5" />
-          <span className="text-[9px]">Orchestrator</span>
+          <span className="text-[9px]">Orquestrador</span>
         </button>
 
         <button
@@ -2254,7 +2644,7 @@ export default function App() {
           }`}
         >
           <Settings className="w-5 h-5" />
-          <span className="text-[9px]">Settings</span>
+          <span className="text-[9px]">Ajustes</span>
         </button>
       </nav>
 
