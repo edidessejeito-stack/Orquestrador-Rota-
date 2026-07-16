@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -35,7 +36,8 @@ import {
   ChevronRight,
   AlertCircle,
   HelpCircle,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from "lucide-react";
 
 // Types
@@ -77,8 +79,18 @@ export default function App() {
   });
 
   // Navigation sidebar & mobile views
-  const [activeTab, setActiveTab] = useState<"orchestrator" | "agents" | "specifications" | "settings">("orchestrator");
+  const [activeTab, setActiveTab] = useState<"orchestrator" | "live" | "agents" | "specifications" | "settings">("orchestrator");
   const [mobileKanbanTab, setMobileKanbanTab] = useState<TaskStatus>("TO_DO");
+
+  // Deletion Confirmation States
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+
+  // Lazy-load collapsible/expandable states
+  const [expandedAgentIds, setExpandedAgentIds] = useState<string[]>([]);
+  const [expandedUserStories, setExpandedUserStories] = useState<string[]>([]);
+  const [expandedSections, setExpandedSections] = useState<string[]>(["section1"]); // only Section 1 is open by default, Section 2 & 3 are collapsed!
+  const [isMiniAgentsExpanded, setIsMiniAgentsExpanded] = useState(false);
 
   // Hiring center modal
   const [isHiringModalOpen, setIsHiringModalOpen] = useState(false);
@@ -177,7 +189,17 @@ export default function App() {
     { name: "Semana 5", "Evelyn Rota": 6, "Atlas Bot": 12, "Nova Pen": 8 },
   ]);
 
-  // Terminal state
+  // Paperclips Orchestrator Simulation states (Universal Paperclips inspired layout & metrics)
+  const [clipsComputed, setClipsComputed] = useState(142500);
+  const [operationPrice, setOperationPrice] = useState(0.25);
+  const [unsoldInventory, setUnsoldInventory] = useState(420);
+  const [processors, setProcessors] = useState(1);
+  const [memoryGb, setMemoryGb] = useState(16);
+  const [operationsStored, setOperationsStored] = useState(1000);
+  const [maxOperations, setMaxOperations] = useState(1000);
+  const [marketingLevel, setMarketingLevel] = useState(1);
+  const [clipDemand, setClipDemand] = useState(45); // Public Demand %
+
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: "log-1",
@@ -208,13 +230,12 @@ export default function App() {
   const [terminalInput, setTerminalInput] = useState("");
   const terminalBottomRef = useRef<HTMLDivElement>(null);
 
-  // Financial status calculations
+  // Financial status states
   const totalBudgetLimit = 100000;
   const initialHiringCredits = 12450;
+  const [availableFunds, setAvailableFunds] = useState(1950); // initial: 12450 - (5000 + 3500 + 2000)
   const totalSpent = agents.reduce((acc, current) => acc + current.budget, 0);
-  const hiringCreditsRemaining = initialHiringCredits - totalSpent > 0 
-    ? initialHiringCredits - totalSpent 
-    : 150;
+  const hiringCreditsRemaining = availableFunds;
 
   // Auto scroll terminal
   useEffect(() => {
@@ -250,7 +271,7 @@ export default function App() {
       setLogs((prev) => [
         ...prev,
         {
-          id: `log-dynamic-${Date.now()}`,
+          id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
           timestamp: timeStr,
           type: randomLog.type,
           message: randomLog.message,
@@ -273,6 +294,68 @@ export default function App() {
 
     return () => clearInterval(interval);
   }, [isLogRunning]);
+
+  // Universal Paperclips Incremental Simulation Loop
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Calculate active working agents
+      const activeWorkingAgents = agents.filter(a => a.status === "WORKING").length;
+      
+      // Calculate max operations storage
+      const currentMaxOps = 1000 + memoryGb * 100;
+      setMaxOperations(currentMaxOps);
+
+      // Generate operations via processors
+      setOperationsStored(prev => {
+        const generation = Math.floor(processors * (3 + activeWorkingAgents * 2));
+        return Math.min(currentMaxOps, prev + generation);
+      });
+
+      // Calculate Public Demand based on marketing and price
+      const demand = Math.max(1, Math.round((marketingLevel * 45) / (operationPrice * 4)));
+      setClipDemand(demand);
+
+      // Production Rate (Clips Manufactured per cycle)
+      // Even if no agents are working, user can manual-compute or get a trickle of 1 clip per cycle
+      const clipProductionRate = activeWorkingAgents > 0 
+        ? Math.floor((activeWorkingAgents * 2 + 1) * processors * (2 + Math.random()))
+        : 1;
+
+      // Update total computed clips and unsold inventory
+      setClipsComputed(prev => prev + clipProductionRate);
+      setUnsoldInventory(prev => prev + clipProductionRate);
+
+      // Sell Unsold Inventory based on public demand
+      setUnsoldInventory(prev => {
+        if (prev <= 0) return 0;
+        
+        const clipsSold = Math.min(prev, Math.floor(demand * (1.2 + Math.random())));
+        if (clipsSold > 0) {
+          const revenue = Number((clipsSold * operationPrice).toFixed(2));
+          setAvailableFunds(funds => Number((funds + revenue).toFixed(2)));
+          
+          // Occasional logging
+          if (Math.random() < 0.12) {
+            const now = new Date();
+            const timeStr = now.toTimeString().split(" ")[0];
+            setLogs(logsPrev => [
+              ...logsPrev.slice(-30), // Prevent memory bloat by capping log array
+              {
+                id: `log-sale-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                timestamp: timeStr,
+                type: "SUCCESS",
+                message: `Orquestrador vendeu ${clipsSold} clipes de dados por $${revenue.toFixed(2)}. Fundos atualizados.`,
+              }
+            ]);
+          }
+        }
+        return Math.max(0, prev - clipsSold);
+      });
+
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, [agents, processors, memoryGb, marketingLevel, operationPrice]);
 
   // Save theme helper
   const handleThemeChange = (newTheme: ThemeMode) => {
@@ -298,7 +381,7 @@ export default function App() {
     const chosenBg = randomColorGradients[Math.floor(Math.random() * randomColorGradients.length)];
 
     const newAgent: Agent = {
-      id: `agent-${Date.now()}`,
+      id: `agent-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       name: hiringForm.name,
       role: hiringForm.role,
       status: "WAKING", // default state when hired
@@ -315,7 +398,7 @@ export default function App() {
     setLogs((prev) => [
       ...prev,
       {
-        id: `log-dynamic-${Date.now()}`,
+        id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: timeStr,
         type: "SUCCESS",
         message: `Novo agente contratado: ${newAgent.name} como ${newAgent.role} com orçamento de $${newAgent.budget}.`,
@@ -341,7 +424,7 @@ export default function App() {
     }
 
     const newTask: Task = {
-      id: `task-${Date.now()}`,
+      id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       title: taskForm.title,
       agentId: taskForm.agentId || agents[0]?.id || "agent-1",
       priority: taskForm.priority,
@@ -355,7 +438,7 @@ export default function App() {
     setLogs((prev) => [
       ...prev,
       {
-        id: `log-dynamic-${Date.now()}`,
+        id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: timeStr,
         type: "TASK",
         message: `Nova missão criada: '${newTask.title}' atribuída ao agente: ${agents.find(a => a.id === newTask.agentId)?.name || "Ninguém"}.`,
@@ -411,7 +494,7 @@ export default function App() {
               setLogs((prevLogs) => [
                 ...prevLogs,
                 {
-                  id: `log-dynamic-${Date.now()}`,
+                  id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
                   timestamp: timeStr,
                   type: "SYNC",
                   message: `Missão '${t.title}' alterada de [${t.status}] para [${nextStatus}].`,
@@ -445,7 +528,7 @@ export default function App() {
               setLogs((prevLogs) => [
                 ...prevLogs,
                 {
-                  id: `log-dynamic-${Date.now()}`,
+                  id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
                   timestamp: timeStr,
                   type: "SYNC",
                   message: `Missão '${t.title}' reorquestrada manualmente para o status [${newStatus}].`,
@@ -467,9 +550,17 @@ export default function App() {
     );
   };
 
-  // Delete task helper
+  // Delete task helper (intercepts to show modal)
   const deleteTask = (taskId: string) => {
-    const taskToDelete = tasks.find(t => t.id === taskId);
+    const foundTask = tasks.find(t => t.id === taskId);
+    if (foundTask) {
+      setTaskToDelete(foundTask);
+    }
+  };
+
+  // Real deletion execution
+  const confirmDeleteTask = (taskId: string) => {
+    const foundTask = tasks.find(t => t.id === taskId);
     setTasks((prev) => prev.filter((t) => t.id !== taskId));
     
     const now = new Date();
@@ -477,10 +568,37 @@ export default function App() {
     setLogs((prev) => [
       ...prev,
       {
-        id: `log-dynamic-${Date.now()}`,
+        id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: timeStr,
         type: "ERROR",
-        message: `Missão deletada permanentemente: '${taskToDelete?.title || taskId}'.`,
+        message: `Missão deletada permanentemente: '${foundTask?.title || taskId}'.`,
+      }
+    ]);
+  };
+
+  // Demitir/Dismiss agent helper
+  const dismissAgent = (agentId: string) => {
+    const foundAgent = agents.find(a => a.id === agentId);
+    if (!foundAgent) return;
+
+    // Refund their hiring budget
+    setAvailableFunds(prev => prev + foundAgent.budget);
+
+    // Remove agent
+    setAgents(prev => prev.filter(a => a.id !== agentId));
+
+    // Reassign active tasks of dismissed agent to "Ninguém" (unassigned)
+    setTasks(prev => prev.map(t => t.agentId === agentId ? { ...t, agentId: "" } : t));
+
+    const now = new Date();
+    const timeStr = now.toTimeString().split(" ")[0];
+    setLogs((prev) => [
+      ...prev,
+      {
+        id: `log-dismiss-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+        timestamp: timeStr,
+        type: "ERROR",
+        message: `Agente demitido: '${foundAgent.name}'. Alocação de $${foundAgent.budget} reembolsada aos créditos de contratação.`,
       }
     ]);
   };
@@ -491,7 +609,7 @@ export default function App() {
     setAgents([]);
     setLogs([
       {
-        id: `log-reset-${Date.now()}`,
+        id: `log-reset-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: new Date().toTimeString().split(" ")[0],
         type: "INFO",
         message: "Orchestrator zerado com sucesso. Todos os agents e missões de teste foram limpos.",
@@ -504,6 +622,14 @@ export default function App() {
       { name: "Semana 4" },
       { name: "Semana 5" },
     ]);
+    // Reset Paperclip state
+    setClipsComputed(0);
+    setUnsoldInventory(0);
+    setAvailableFunds(12450); // Restore full hiring credits pool
+    setProcessors(1);
+    setMemoryGb(16);
+    setOperationsStored(0);
+    setMarketingLevel(1);
   };
 
   // Restaurar dados de demonstração completos
@@ -578,7 +704,7 @@ export default function App() {
 
     setLogs([
       {
-        id: `log-demo-${Date.now()}`,
+        id: `log-demo-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: new Date().toTimeString().split(" ")[0],
         type: "SUCCESS",
         message: "Dados de demonstração do Orchestrator restaurados com sucesso.",
@@ -592,6 +718,15 @@ export default function App() {
       { name: "Semana 4", "Evelyn Rota": 5, "Atlas Bot": 10, "Nova Pen": 6 },
       { name: "Semana 5", "Evelyn Rota": 6, "Atlas Bot": 12, "Nova Pen": 8 },
     ]);
+
+    // Restore Paperclip state
+    setClipsComputed(142500);
+    setUnsoldInventory(420);
+    setAvailableFunds(1950); // Rest of funds
+    setProcessors(1);
+    setMemoryGb(16);
+    setOperationsStored(1000);
+    setMarketingLevel(1);
   };
 
   // Terminal manual commands handler
@@ -637,13 +772,13 @@ export default function App() {
     setLogs((prev) => [
       ...prev,
       {
-        id: `log-cmd-input-${Date.now()}`,
+        id: `log-cmd-input-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: timeStr,
         type: "INFO",
         message: `> ${terminalInput}`,
       },
       {
-        id: `log-cmd-reply-${Date.now()}`,
+        id: `log-cmd-reply-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         timestamp: timeStr,
         type: replyType,
         message: replyMessage,
@@ -756,6 +891,20 @@ export default function App() {
           >
             <Layers className="w-5 h-5 mr-3 text-blue-500" />
             Orchestrator
+          </button>
+
+          <button
+            onClick={() => setActiveTab("live")}
+            className={`w-full flex items-center px-4 py-3 rounded-xl transition-all font-medium text-left relative ${
+              activeTab === "live" ? themeStyles.sidebarLinkActive : themeStyles.sidebarLinkInactive
+            }`}
+          >
+            <Activity className="w-5 h-5 mr-3 text-red-500" />
+            <span>Painel Live</span>
+            <span className="absolute right-4 top-4 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+            </span>
           </button>
           
           <button
@@ -888,8 +1037,235 @@ export default function App() {
                 </div>
               </div>
 
-              {/* DYNAMIC KANBAN BOARD */}
-              <div className="space-y-4">
+              {/* COMPACT FULL-WIDTH SYSTEM BOARD */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* COL-1: UNIVERSAL PAPERCLIP ORCHESTRATOR PANEL (width 4/12) - Hidden here, moved to dedicated Live tab */}
+                <div className="hidden">
+                  <div className={`p-6 rounded-2xl ${themeStyles.card} space-y-5 font-mono`}>
+                    <div className="border-b border-slate-800/80 pb-3">
+                      <h3 className="text-sm font-bold flex items-center text-slate-200">
+                        <span className="w-2.5 h-2.5 bg-emerald-500 rounded-full mr-2.5 animate-pulse"></span>
+                        PAPERCLIP ORCHESTRATOR v2.1
+                      </h3>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Sincronizador de Lógica de Silício & Demanda</p>
+                    </div>
+
+                    {/* CLIPS COMPUTED STAT */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-end">
+                        <span className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Clipes Fabricados:</span>
+                        <span className="text-2xl font-extrabold text-white animate-pulse">{clipsComputed.toLocaleString()}</span>
+                      </div>
+                      
+                      <button
+                        onClick={() => {
+                          setClipsComputed(prev => prev + 1);
+                          setUnsoldInventory(prev => prev + 1);
+                        }}
+                        className="w-full py-2.5 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-slate-200 font-mono text-xs font-bold rounded-xl transition-all cursor-pointer select-none active:translate-y-0.5"
+                      >
+                        [ Manufaturar Clipe de Dados ]
+                      </button>
+                    </div>
+
+                    <hr className="border-slate-800/80" />
+
+                    {/* BUSINESS SECTION */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800/40 pb-1">Negócios (Business)</h4>
+                      
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Fundos Disponíveis:</span>
+                        <span className="font-extrabold text-emerald-400 font-mono">${availableFunds.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+                      </div>
+
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Estoque de Clipes:</span>
+                        <span className="font-bold text-slate-300 font-mono">{unsoldInventory.toLocaleString()}</span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-slate-500">Preço por Unidade:</span>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => setOperationPrice(prev => Math.max(0.01, Number((prev - 0.01).toFixed(2))))}
+                            className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-white rounded font-bold transition-all cursor-pointer"
+                          >
+                            -
+                          </button>
+                          <span className="font-bold font-mono text-slate-200">${operationPrice.toFixed(2)}</span>
+                          <button
+                            onClick={() => setOperationPrice(prev => Number((prev + 0.01).toFixed(2)))}
+                            className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-[10px] text-white rounded font-bold transition-all cursor-pointer"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500">Demanda Pública:</span>
+                        <span className="font-bold text-slate-300 font-mono">{clipDemand}%</span>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs pt-1">
+                        <div className="flex flex-col">
+                          <span className="text-slate-500">Marketing (Lvl {marketingLevel}):</span>
+                          <span className="text-[9px] text-slate-500 font-bold">Custo: ${(marketingLevel * 150).toLocaleString()}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const cost = marketingLevel * 150;
+                            if (availableFunds >= cost) {
+                              setAvailableFunds(prev => Number((prev - cost).toFixed(2)));
+                              setMarketingLevel(prev => prev + 1);
+                              
+                              const now = new Date();
+                              const timeStr = now.toTimeString().split(" ")[0];
+                              setLogs(l => [
+                                ...l,
+                                {
+                                  id: `log-marketing-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                                  timestamp: timeStr,
+                                  type: "SUCCESS",
+                                  message: `Upgrade de Marketing comprado! Nível atual: Lvl ${marketingLevel + 1}.`,
+                                }
+                              ]);
+                            } else {
+                              alert("Fundos insuficientes para upgrade de marketing!");
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-[10px] text-slate-300 rounded-lg cursor-pointer"
+                        >
+                          [ Upgrade ]
+                        </button>
+                      </div>
+                    </div>
+
+                    <hr className="border-slate-800/80" />
+
+                    {/* COMPUTATIONAL RESOURCES SECTION */}
+                    <div className="space-y-3">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest border-b border-slate-800/40 pb-1">Recursos de Computação</h4>
+                      
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-slate-500">Processadores ({processors}):</span>
+                          <span className="text-[9px] text-slate-500 font-bold">Custo: ${(processors * 250).toLocaleString()}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const cost = processors * 250;
+                            if (availableFunds >= cost) {
+                              setAvailableFunds(prev => Number((prev - cost).toFixed(2)));
+                              setProcessors(prev => prev + 1);
+                              
+                              const now = new Date();
+                              const timeStr = now.toTimeString().split(" ")[0];
+                              setLogs(l => [
+                                ...l,
+                                {
+                                  id: `log-processor-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                                  timestamp: timeStr,
+                                  type: "SYNC",
+                                  message: `Novo Processador CPU ativado! Capacidade de computação aumentada para x${processors + 1}.`,
+                                }
+                              ]);
+                            } else {
+                              alert("Créditos insuficientes para adicionar processador!");
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-[10px] text-slate-300 rounded-lg cursor-pointer"
+                        >
+                          [ Comprar CPU ]
+                        </button>
+                      </div>
+
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-slate-500">Memória RAM ({memoryGb}GB):</span>
+                          <span className="text-[9px] text-slate-500 font-bold">Custo: ${(memoryGb * 20).toLocaleString()}</span>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const cost = memoryGb * 20;
+                            if (availableFunds >= cost) {
+                              setAvailableFunds(prev => Number((prev - cost).toFixed(2)));
+                              setMemoryGb(prev => prev + 16);
+                              
+                              const now = new Date();
+                              const timeStr = now.toTimeString().split(" ")[0];
+                              setLogs(l => [
+                                ...l,
+                                {
+                                  id: `log-memory-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                                  timestamp: timeStr,
+                                  type: "SYNC",
+                                  message: `Memória RAM aprimorada! Buffer máximo de operações expandido para ${(1000 + (memoryGb + 16) * 100).toLocaleString()}.`,
+                                }
+                              ]);
+                            } else {
+                              alert("Créditos insuficientes para adicionar RAM!");
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-slate-900 border border-slate-700 hover:bg-slate-800 text-[10px] text-slate-300 rounded-lg cursor-pointer"
+                        >
+                          [ Comprar RAM ]
+                        </button>
+                      </div>
+
+                      {/* OPERATIONS PROGRESS BAR */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex justify-between text-[11px]">
+                          <span className="text-slate-500">Operações Armazenadas:</span>
+                          <span className="font-bold text-blue-400">{operationsStored.toLocaleString()} / {maxOperations.toLocaleString()}</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-300" 
+                            style={{ width: `${(operationsStored / maxOperations) * 100}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* COMPUTATIONAL UPGRADE ACTION */}
+                      <button
+                        onClick={() => {
+                          if (operationsStored >= 800) {
+                            setOperationsStored(prev => prev - 800);
+                            setAvailableFunds(prev => prev + 1000); // Give 1000 credits as a big reward!
+                            
+                            const now = new Date();
+                            const timeStr = now.toTimeString().split(" ")[0];
+                            setLogs(l => [
+                              ...l,
+                              {
+                                id: `log-upgrade-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+                                timestamp: timeStr,
+                                type: "SUCCESS",
+                                message: "Algoritmo de Silício Coerente Computado! Recompensa de $1.000 concedida ao Orquestrador.",
+                              }
+                            ]);
+                            alert("Sucesso! Upgrade computado. Recompensa de $1.000 créditos depositada.");
+                          } else {
+                            alert(`Operações insuficientes! Custo: 800 operações (Você possui ${operationsStored}).`);
+                          }
+                        }}
+                        className="w-full py-2 bg-gradient-to-r from-blue-900/40 to-indigo-900/40 border border-blue-500/30 hover:brightness-110 text-blue-300 text-xs rounded-xl transition-all cursor-pointer active:translate-y-0.5 mt-2 flex items-center justify-center gap-1.5"
+                      >
+                        <span>[ Computar Upgrade de Algoritmo ]</span>
+                        <span className="text-[9px] bg-blue-500/20 px-1.5 py-0.5 rounded text-blue-400 font-extrabold border border-blue-500/20">800 Ops</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* COL-2: AGILE SYSTEM BOARD (width 12/12) */}
+                <div className="lg:col-span-12 space-y-6">
+                  
+                  {/* DYNAMIC KANBAN BOARD */}
+                  <div className="space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/60 pb-3">
                   <div className="flex items-center space-x-3">
                     <h3 className="text-lg font-bold flex items-center">
@@ -949,22 +1325,40 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40">
-                      {tasks.filter(t => t.status === "TO_DO").length === 0 ? (
-                        <p className="text-xs text-slate-500 text-center py-10 italic">Nenhuma missão no momento</p>
-                      ) : (
-                        tasks.filter(t => t.status === "TO_DO").map(t => (
-                          <TaskCard 
-                            key={t.id} 
-                            task={t} 
-                            agents={agents} 
-                            themeStyles={themeStyles}
-                            onDelete={deleteTask}
-                            onMove={moveTaskStatus}
-                            onChangeStatus={changeTaskStatusDropdown}
-                          />
-                        ))
-                      )}
+                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                      <AnimatePresence mode="popLayout">
+                        {tasks.filter(t => t.status === "TO_DO").length === 0 ? (
+                          <motion.p
+                            key="empty-todo"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-xs text-slate-500 text-center py-10 italic w-full"
+                          >
+                            Nenhuma missão no momento
+                          </motion.p>
+                        ) : (
+                          tasks.filter(t => t.status === "TO_DO").map(t => (
+                            <motion.div
+                              key={t.id}
+                              layout
+                              initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -12, scale: 0.95 }}
+                              transition={{ duration: 0.25, ease: "easeInOut" }}
+                            >
+                              <TaskCard 
+                                task={t} 
+                                agents={agents} 
+                                themeStyles={themeStyles}
+                                onDelete={deleteTask}
+                                onMove={moveTaskStatus}
+                                onChangeStatus={changeTaskStatusDropdown}
+                              />
+                            </motion.div>
+                          ))
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -979,22 +1373,40 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40">
-                      {tasks.filter(t => t.status === "IN_PROGRESS").length === 0 ? (
-                        <p className="text-xs text-slate-500 text-center py-10 italic">Nenhum agente executando agora</p>
-                      ) : (
-                        tasks.filter(t => t.status === "IN_PROGRESS").map(t => (
-                          <TaskCard 
-                            key={t.id} 
-                            task={t} 
-                            agents={agents} 
-                            themeStyles={themeStyles}
-                            onDelete={deleteTask}
-                            onMove={moveTaskStatus}
-                            onChangeStatus={changeTaskStatusDropdown}
-                          />
-                        ))
-                      )}
+                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                      <AnimatePresence mode="popLayout">
+                        {tasks.filter(t => t.status === "IN_PROGRESS").length === 0 ? (
+                          <motion.p
+                            key="empty-inprogress"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-xs text-slate-500 text-center py-10 italic w-full"
+                          >
+                            Nenhum agente executando agora
+                          </motion.p>
+                        ) : (
+                          tasks.filter(t => t.status === "IN_PROGRESS").map(t => (
+                            <motion.div
+                              key={t.id}
+                              layout
+                              initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -12, scale: 0.95 }}
+                              transition={{ duration: 0.25, ease: "easeInOut" }}
+                            >
+                              <TaskCard 
+                                task={t} 
+                                agents={agents} 
+                                themeStyles={themeStyles}
+                                onDelete={deleteTask}
+                                onMove={moveTaskStatus}
+                                onChangeStatus={changeTaskStatusDropdown}
+                              />
+                            </motion.div>
+                          ))
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -1009,22 +1421,40 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40">
-                      {tasks.filter(t => t.status === "REVIEW").length === 0 ? (
-                        <p className="text-xs text-slate-500 text-center py-10 italic">Nenhum aguardando aprovação</p>
-                      ) : (
-                        tasks.filter(t => t.status === "REVIEW").map(t => (
-                          <TaskCard 
-                            key={t.id} 
-                            task={t} 
-                            agents={agents} 
-                            themeStyles={themeStyles}
-                            onDelete={deleteTask}
-                            onMove={moveTaskStatus}
-                            onChangeStatus={changeTaskStatusDropdown}
-                          />
-                        ))
-                      )}
+                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                      <AnimatePresence mode="popLayout">
+                        {tasks.filter(t => t.status === "REVIEW").length === 0 ? (
+                          <motion.p
+                            key="empty-review"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-xs text-slate-500 text-center py-10 italic w-full"
+                          >
+                            Nenhum aguardando aprovação
+                          </motion.p>
+                        ) : (
+                          tasks.filter(t => t.status === "REVIEW").map(t => (
+                            <motion.div
+                              key={t.id}
+                              layout
+                              initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -12, scale: 0.95 }}
+                              transition={{ duration: 0.25, ease: "easeInOut" }}
+                            >
+                              <TaskCard 
+                                task={t} 
+                                agents={agents} 
+                                themeStyles={themeStyles}
+                                onDelete={deleteTask}
+                                onMove={moveTaskStatus}
+                                onChangeStatus={changeTaskStatusDropdown}
+                              />
+                            </motion.div>
+                          ))
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -1039,22 +1469,40 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40">
-                      {tasks.filter(t => t.status === "DONE").length === 0 ? (
-                        <p className="text-xs text-slate-500 text-center py-10 italic">Nenhuma missão finalizada ainda</p>
-                      ) : (
-                        tasks.filter(t => t.status === "DONE").map(t => (
-                          <TaskCard 
-                            key={t.id} 
-                            task={t} 
-                            agents={agents} 
-                            themeStyles={themeStyles}
-                            onDelete={deleteTask}
-                            onMove={moveTaskStatus}
-                            onChangeStatus={changeTaskStatusDropdown}
-                          />
-                        ))
-                      )}
+                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                      <AnimatePresence mode="popLayout">
+                        {tasks.filter(t => t.status === "DONE").length === 0 ? (
+                          <motion.p
+                            key="empty-done"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-xs text-slate-500 text-center py-10 italic w-full"
+                          >
+                            Nenhuma missão finalizada ainda
+                          </motion.p>
+                        ) : (
+                          tasks.filter(t => t.status === "DONE").map(t => (
+                            <motion.div
+                              key={t.id}
+                              layout
+                              initial={{ opacity: 0, y: 12, scale: 0.95 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -12, scale: 0.95 }}
+                              transition={{ duration: 0.25, ease: "easeInOut" }}
+                            >
+                              <TaskCard 
+                                task={t} 
+                                agents={agents} 
+                                themeStyles={themeStyles}
+                                onDelete={deleteTask}
+                                onMove={moveTaskStatus}
+                                onChangeStatus={changeTaskStatusDropdown}
+                              />
+                            </motion.div>
+                          ))
+                        )}
+                      </AnimatePresence>
                     </div>
                   </div>
 
@@ -1160,7 +1608,9 @@ export default function App() {
                   </div>
                 </div>
 
-              </div>
+                </div> {/* ACTIVE AGENTS MINI SECTION END */}
+                </div> {/* COL-2 AGILE BOARD END */}
+              </div> {/* GRID PRINCIPAL END */}
 
             </div>
           )}
@@ -1221,7 +1671,7 @@ export default function App() {
                               setLogs((prev) => [
                                 ...prev,
                                 {
-                                  id: `log-dynamic-${Date.now()}`,
+                                  id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
                                   timestamp: timeStr,
                                   type: "SYNC",
                                   message: `Agente ${agent.name} teve o estado alterado via painel para [${next}].`,
@@ -1253,8 +1703,18 @@ export default function App() {
                       </div>
 
                       <div className="mt-6 pt-4 border-t border-slate-800/60 flex items-center justify-between text-xs">
-                        <span className="text-slate-400">Orçamento Consumido:</span>
-                        <span className="font-extrabold font-mono text-purple-400">${agent.budget.toLocaleString()} / mo</span>
+                        <div>
+                          <span className="text-slate-400 block">Orçamento Consumido:</span>
+                          <span className="font-extrabold font-mono text-purple-400">${agent.budget.toLocaleString()} / mo</span>
+                        </div>
+                        {agent.id !== "agent-1" && (
+                          <button
+                            onClick={() => setAgentToDelete(agent)}
+                            className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded-xl text-[11px] font-bold transition-all cursor-pointer"
+                          >
+                            Demitir Agente
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1742,241 +2202,382 @@ export default function App() {
       </div>
 
       {/* MOBILE BOTTOM NAVIGATION BAR */}
-      <nav className={`md:hidden fixed bottom-0 left-0 right-0 h-16 z-20 flex items-center justify-around px-4 ${themeStyles.navBottomBg}`}>
+      <nav className={`md:hidden fixed bottom-0 left-0 right-0 h-16 z-20 flex items-center justify-around px-2 ${themeStyles.navBottomBg}`}>
         <button
           onClick={() => setActiveTab("orchestrator")}
-          className={`flex flex-col items-center justify-center space-y-1 ${
-            activeTab === "orchestrator" ? "text-purple-500" : "text-slate-400"
+          className={`flex flex-col items-center justify-center space-y-1 flex-1 ${
+            activeTab === "orchestrator" ? "text-purple-500 font-extrabold" : "text-slate-400 font-medium"
           }`}
         >
           <Layers className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Orchestrator</span>
+          <span className="text-[9px]">Orchestrator</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("live")}
+          className={`flex flex-col items-center justify-center space-y-1 flex-1 relative ${
+            activeTab === "live" ? "text-red-500 font-extrabold" : "text-slate-400 font-medium"
+          }`}
+        >
+          <Activity className={`w-5 h-5 ${activeTab === "live" ? "animate-pulse" : ""}`} />
+          <span className="text-[9px]">Live</span>
+          <span className="absolute top-2 right-4 flex h-1.5 w-1.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+          </span>
         </button>
 
         <button
           onClick={() => setActiveTab("agents")}
-          className={`flex flex-col items-center justify-center space-y-1 ${
-            activeTab === "agents" ? "text-purple-500" : "text-slate-400"
+          className={`flex flex-col items-center justify-center space-y-1 flex-1 ${
+            activeTab === "agents" ? "text-purple-500 font-extrabold" : "text-slate-400 font-medium"
           }`}
         >
           <Users className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Agentes</span>
+          <span className="text-[9px]">Agentes</span>
         </button>
 
         <button
           onClick={() => setActiveTab("specifications")}
-          className={`flex flex-col items-center justify-center space-y-1 ${
-            activeTab === "specifications" ? "text-purple-500" : "text-slate-400"
+          className={`flex flex-col items-center justify-center space-y-1 flex-1 ${
+            activeTab === "specifications" ? "text-purple-500 font-extrabold" : "text-slate-400 font-medium"
           }`}
         >
           <FileText className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Specs</span>
+          <span className="text-[9px]">Specs</span>
         </button>
 
         <button
           onClick={() => setActiveTab("settings")}
-          className={`flex flex-col items-center justify-center space-y-1 ${
-            activeTab === "settings" ? "text-purple-500" : "text-slate-400"
+          className={`flex flex-col items-center justify-center space-y-1 flex-1 ${
+            activeTab === "settings" ? "text-purple-500 font-extrabold" : "text-slate-400 font-medium"
           }`}
         >
           <Settings className="w-5 h-5" />
-          <span className="text-[10px] font-bold">Settings</span>
+          <span className="text-[9px]">Settings</span>
         </button>
       </nav>
 
       {/* HIRING CENTER MODAL (ADD NEW AGENT FORM) */}
-      {isHiringModalOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`w-full max-w-lg rounded-2xl overflow-hidden border p-6 space-y-4 shadow-2xl ${themeStyles.card}`}>
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center space-x-2">
-                <Users className="w-5 h-5 text-[#7C3AED]" />
-                <h3 className="font-extrabold text-base md:text-lg">Hiring Center - Contratação de Agentes</h3>
-              </div>
-              <button 
-                onClick={() => setIsHiringModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800/80 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleHireAgentSubmit} className="space-y-4 text-xs md:text-sm">
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-300">Nome do Agente Virtual <span className="text-red-400">*</span></label>
-                <input
-                  type="text"
-                  required
-                  value={hiringForm.name}
-                  onChange={(e) => setHiringForm({...hiringForm, name: e.target.value})}
-                  placeholder="Ex: Evelyn Rota, Atlas Bot, Nova Pen..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block font-bold text-slate-300">Cargo / Função <span className="text-red-400">*</span></label>
-                  <select
-                    value={hiringForm.role}
-                    onChange={(e) => setHiringForm({...hiringForm, role: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
-                  >
-                    <option value="CEO & Orchestrator">CEO & Orchestrator</option>
-                    <option value="Senior Developer">Senior Developer</option>
-                    <option value="QA Engineer">QA Engineer</option>
-                    <option value="Copywriter & Marketing">Copywriter & Marketing</option>
-                    <option value="UX Designer">UX Designer</option>
-                    <option value="Legal Agent">Legal Agent</option>
-                  </select>
+      <AnimatePresence>
+        {isHiringModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.35, bounce: 0.15 }}
+              className={`w-full max-w-lg rounded-2xl overflow-hidden border p-6 space-y-4 shadow-2xl ${themeStyles.card}`}
+            >
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <Users className="w-5 h-5 text-[#7C3AED]" />
+                  <h3 className="font-extrabold text-base md:text-lg">Hiring Center - Contratação de Agentes</h3>
                 </div>
+                <button 
+                  onClick={() => setIsHiringModalOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800/80 text-sm font-bold"
+                >
+                  ✕
+                </button>
+              </div>
 
+              <form onSubmit={handleHireAgentSubmit} className="space-y-4 text-xs md:text-sm">
                 <div className="space-y-1">
-                  <label className="block font-bold text-slate-300">Orçamento Mensal ($) <span className="text-red-400">*</span></label>
+                  <label className="block font-bold text-slate-300">Nome do Agente Virtual <span className="text-red-400">*</span></label>
                   <input
-                    type="number"
-                    min="500"
-                    max="10000"
+                    type="text"
                     required
-                    value={hiringForm.budget}
-                    onChange={(e) => setHiringForm({...hiringForm, budget: Number(e.target.value) || 0})}
-                    placeholder="Alocação em $"
+                    value={hiringForm.name}
+                    onChange={(e) => setHiringForm({...hiringForm, name: e.target.value})}
+                    placeholder="Ex: Evelyn Rota, Atlas Bot, Nova Pen..."
                     className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
                   />
                 </div>
-              </div>
 
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-300">System Instruction de Escopo <span className="text-red-400">*</span></label>
-                <textarea
-                  required
-                  rows={3}
-                  value={hiringForm.instruction}
-                  onChange={(e) => setHiringForm({...hiringForm, instruction: e.target.value})}
-                  placeholder="Descreva as diretrizes comportamentais e responsabilidade técnica que este agente virtual obedecerá ao receber uma missão..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500 leading-relaxed"
-                />
-              </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="block font-bold text-slate-300">Cargo / Função <span className="text-red-400">*</span></label>
+                    <select
+                      value={hiringForm.role}
+                      onChange={(e) => setHiringForm({...hiringForm, role: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
+                    >
+                      <option value="CEO & Orchestrator">CEO & Orchestrator</option>
+                      <option value="Senior Developer">Senior Developer</option>
+                      <option value="QA Engineer">QA Engineer</option>
+                      <option value="Copywriter & Marketing">Copywriter & Marketing</option>
+                      <option value="UX Designer">UX Designer</option>
+                      <option value="Legal Agent">Legal Agent</option>
+                    </select>
+                  </div>
 
-              <div className="bg-purple-950/20 border border-purple-500/20 p-3 rounded-xl text-[11px] leading-relaxed text-slate-400">
-                ⚠️ A contratação consome créditos disponíveis instantaneamente. O agente entrará por padrão em modo "WAKING" (Despertando), carregando seus pesos neuronais na memória de orquestração.
-              </div>
+                  <div className="space-y-1">
+                    <label className="block font-bold text-slate-300">Orçamento Mensal ($) <span className="text-red-400">*</span></label>
+                    <input
+                      type="number"
+                      min="500"
+                      max="10000"
+                      required
+                      value={hiringForm.budget}
+                      onChange={(e) => setHiringForm({...hiringForm, budget: Number(e.target.value) || 0})}
+                      placeholder="Alocação em $"
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-3">
-                <button
-                  type="button"
-                  onClick={() => setIsHiringModalOpen(false)}
-                  className={`px-4 py-2 rounded-xl font-bold ${themeStyles.buttonSecondary}`}
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className={`px-5 py-2 rounded-xl font-bold ${themeStyles.buttonPrimary}`}
-                >
-                  Confirmar Contratação
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-300">System Instruction de Escopo <span className="text-red-400">*</span></label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={hiringForm.instruction}
+                    onChange={(e) => setHiringForm({...hiringForm, instruction: e.target.value})}
+                    placeholder="Descreva as diretrizes comportamentais e responsabilidade técnica que este agente virtual obedecerá ao receber uma missão..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500 leading-relaxed"
+                  />
+                </div>
+
+                <div className="bg-purple-950/20 border border-purple-500/20 p-3 rounded-xl text-[11px] leading-relaxed text-slate-400">
+                  ⚠️ A contratação consome créditos disponíveis instantaneamente. O agente entrará por padrão em modo "WAKING" (Despertando), carregando seus pesos neuronais na memória de orquestração.
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsHiringModalOpen(false)}
+                    className={`px-4 py-2 rounded-xl font-bold ${themeStyles.buttonSecondary}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className={`px-5 py-2 rounded-xl font-bold ${themeStyles.buttonPrimary}`}
+                  >
+                    Confirmar Contratação
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* CREATE NEW TASK MODAL */}
-      {isCreateTaskOpen && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className={`w-full max-w-md rounded-2xl overflow-hidden border p-6 space-y-4 shadow-2xl ${themeStyles.card}`}>
-            
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center space-x-2">
-                <CheckSquare className="w-5 h-5 text-indigo-400" />
-                <h3 className="font-extrabold text-base md:text-lg">Nova Missão para os Agentes</h3>
-              </div>
-              <button 
-                onClick={() => setIsCreateTaskOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800/80 text-sm font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateTaskSubmit} className="space-y-4 text-xs md:text-sm">
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-300">Título da Missão <span className="text-red-400">*</span></label>
-                <input
-                  type="text"
-                  required
-                  value={taskForm.title}
-                  onChange={(e) => setTaskForm({...taskForm, title: e.target.value})}
-                  placeholder="Descreva o que o agente deve construir ou auditar..."
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="block font-bold text-slate-300">Agente Responsável</label>
-                  <select
-                    value={taskForm.agentId}
-                    onChange={(e) => setTaskForm({...taskForm, agentId: e.target.value})}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
-                  >
-                    <option value="">Selecione um agente...</option>
-                    {agents.map(a => (
-                      <option key={a.id} value={a.id}>{a.name} ({a.role.split(" ")[0]})</option>
-                    ))}
-                  </select>
+      <AnimatePresence>
+        {isCreateTaskOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.95, y: 15, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.35, bounce: 0.15 }}
+              className={`w-full max-w-md rounded-2xl overflow-hidden border p-6 space-y-4 shadow-2xl ${themeStyles.card}`}
+            >
+              
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center space-x-2">
+                  <CheckSquare className="w-5 h-5 text-indigo-400" />
+                  <h3 className="font-extrabold text-base md:text-lg">Nova Missão para os Agentes</h3>
                 </div>
-
-                <div className="space-y-1">
-                  <label className="block font-bold text-slate-300">Prioridade</label>
-                  <select
-                    value={taskForm.priority}
-                    onChange={(e) => setTaskForm({...taskForm, priority: e.target.value as Priority})}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
-                  >
-                    <option value="LOW">Baixa</option>
-                    <option value="MEDIUM">Média</option>
-                    <option value="HIGH">Alta</option>
-                    <option value="URGENT">Urgente</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="block font-bold text-slate-300">Coluna Inicial</label>
-                <select
-                  value={taskForm.status}
-                  onChange={(e) => setTaskForm({...taskForm, status: e.target.value as TaskStatus})}
-                  className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
+                <button 
+                  onClick={() => setIsCreateTaskOpen(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800/80 text-sm font-bold"
                 >
-                  <option value="TO_DO">A Fazer</option>
-                  <option value="IN_PROGRESS">Em Progresso</option>
-                  <option value="REVIEW">Revisão</option>
-                  <option value="DONE">Concluído</option>
-                </select>
+                  ✕
+                </button>
               </div>
 
-              <div className="flex items-center justify-end space-x-3 pt-3">
+              <form onSubmit={handleCreateTaskSubmit} className="space-y-4 text-xs md:text-sm">
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-300">Título da Missão <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={taskForm.title}
+                    onChange={(e) => setTaskForm({...taskForm, title: e.target.value})}
+                    placeholder="Descreva o que o agente deve construir ou auditar..."
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="block font-bold text-slate-300">Agente Responsável</label>
+                    <select
+                      value={taskForm.agentId}
+                      onChange={(e) => setTaskForm({...taskForm, agentId: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
+                    >
+                      <option value="">Selecione um agente...</option>
+                      {agents.map(a => (
+                        <option key={a.id} value={a.id}>{a.name} ({a.role.split(" ")[0]})</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-bold text-slate-300">Prioridade</label>
+                    <select
+                      value={taskForm.priority}
+                      onChange={(e) => setTaskForm({...taskForm, priority: e.target.value as Priority})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
+                    >
+                      <option value="LOW">Baixa</option>
+                      <option value="MEDIUM">Média</option>
+                      <option value="HIGH">Alta</option>
+                      <option value="URGENT">Urgente</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-bold text-slate-300">Coluna Inicial</label>
+                  <select
+                    value={taskForm.status}
+                    onChange={(e) => setTaskForm({...taskForm, status: e.target.value as TaskStatus})}
+                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
+                  >
+                    <option value="TO_DO">A Fazer</option>
+                    <option value="IN_PROGRESS">Em Progresso</option>
+                    <option value="REVIEW">Revisão</option>
+                    <option value="DONE">Concluído</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center justify-end space-x-3 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateTaskOpen(false)}
+                    className={`px-4 py-2 rounded-xl font-bold ${themeStyles.buttonSecondary}`}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    className={`px-5 py-2 rounded-xl font-bold ${themeStyles.buttonPrimary}`}
+                  >
+                    Criar Missão
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* TASK DELETION CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {taskToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className={`w-full max-w-md p-6 rounded-2xl border ${themeStyles.card} shadow-2xl relative overflow-hidden`}
+            >
+              <div className="flex items-center space-x-3 text-red-500 mb-4">
+                <AlertCircle className="w-6 h-6 shrink-0 animate-pulse" />
+                <h3 className="text-lg font-bold">Confirmar Exclusão</h3>
+              </div>
+              
+              <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+                Você tem certeza absoluta que deseja excluir permanentemente a missão <span className="font-extrabold text-white">"{taskToDelete.title}"</span>? Esta ação não pode ser desfeita.
+              </p>
+
+              <div className="flex items-center justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => setIsCreateTaskOpen(false)}
-                  className={`px-4 py-2 rounded-xl font-bold ${themeStyles.buttonSecondary}`}
+                  onClick={() => setTaskToDelete(null)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.buttonSecondary}`}
                 >
                   Cancelar
                 </button>
                 <button
-                  type="submit"
-                  className={`px-5 py-2 rounded-xl font-bold ${themeStyles.buttonPrimary}`}
+                  type="button"
+                  onClick={() => {
+                    confirmDeleteTask(taskToDelete.id);
+                    setTaskToDelete(null);
+                  }}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(220,38,38,0.2)] border border-red-500/20"
                 >
-                  Criar Missão
+                  Deletar Missão
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* AGENT DISMISSAL CONFIRMATION MODAL */}
+      <AnimatePresence>
+        {agentToDelete && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div 
+              initial={{ scale: 0.95, y: 15 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 15 }}
+              className={`w-full max-w-md p-6 rounded-2xl border ${themeStyles.card} shadow-2xl relative overflow-hidden`}
+            >
+              <div className="flex items-center space-x-3 text-red-500 mb-4">
+                <AlertCircle className="w-6 h-6 shrink-0" />
+                <h3 className="text-lg font-bold">Confirmar Demissão</h3>
+              </div>
+              
+              <p className="text-sm text-slate-300 mb-2 leading-relaxed">
+                Deseja realmente desativar e demitir o agente de inteligência <span className="font-extrabold text-white">{agentToDelete.name}</span> ({agentToDelete.role})?
+              </p>
+              
+              <ul className="text-xs text-slate-400 space-y-1.5 list-disc pl-5 mb-6">
+                <li>O saldo alocado de <span className="text-emerald-400 font-bold">${agentToDelete.budget.toLocaleString()}</span> será reembolsado para os créditos de contratação.</li>
+                <li>Todas as missões ativas atribuídas a ele ficarão não atribuídas.</li>
+              </ul>
+
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  type="button"
+                  onClick={() => setAgentToDelete(null)}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold ${themeStyles.buttonSecondary}`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismissAgent(agentToDelete.id);
+                    setAgentToDelete(null);
+                  }}
+                  className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-bold rounded-xl transition-all shadow-[0_0_15px_rgba(220,38,38,0.2)] border border-red-500/20"
+                >
+                  Demitir Agente
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
