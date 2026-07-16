@@ -39,8 +39,16 @@ import {
   RefreshCw,
   Activity,
   Cpu,
-  TrendingUp
+  TrendingUp,
+  LogOut,
+  LogIn,
+  Cloud,
+  CloudLightning,
+  CloudOff
 } from "lucide-react";
+
+import { auth, googleAuthProvider, signInWithPopup, signOut } from "./lib/firebase.ts";
+import { onAuthStateChanged } from "firebase/auth";
 
 // Types
 type AgentStatus = "SLEEPING" | "WAKING" | "WORKING";
@@ -112,104 +120,124 @@ export default function App() {
     status: "TO_DO" as TaskStatus,
   });
 
+  // Firebase Auth and Database Sync States
+  const [user, setUser] = useState<any | null>(null);
+  const [idToken, setIdToken] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [isInitializedFromServer, setIsInitializedFromServer] = useState(false);
+
   // Agents list state
-  const [agents, setAgents] = useState<Agent[]>(() => {
-    const saved = localStorage.getItem("rota_labs_agents");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error parsing agents from localStorage", e);
-      }
-    }
-    return [
-      {
-        id: "agent-1",
-        name: "Evelyn Rota",
-        role: "CEO & Orchestrator",
-        status: "WORKING",
-        instruction: "Main coordinator of Rota Labs systems, resolving logical bottlenecks.",
-        budget: 5000,
-        avatarBg: "from-purple-600 to-pink-500",
-      },
-      {
-        id: "agent-2",
-        name: "Atlas Bot",
-        role: "Senior Dev",
-        status: "WAKING",
-        instruction: "Rust, TypeScript, and microservices architecture optimization agent.",
-        budget: 3500,
-        avatarBg: "from-blue-600 to-indigo-500",
-      },
-      {
-        id: "agent-3",
-        name: "Nova Pen",
-        role: "Copywriter & Marketing",
-        status: "SLEEPING",
-        instruction: "Specialist in highly persuasive copy, SEO optimization, and viral campaign scripts.",
-        budget: 2000,
-        avatarBg: "from-pink-500 to-rose-400",
-      }
-    ];
-  });
+  const [agents, setAgents] = useState<Agent[]>([]);
 
   // Tasks board state
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const saved = localStorage.getItem("rota_labs_tasks");
-    if (saved) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+
+  // Firebase Auth observer
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        try {
+          const token = await currentUser.getIdToken(true);
+          setIdToken(token);
+        } catch (e) {
+          console.error("Error getting idToken", e);
+          setIdToken(null);
+        }
+      } else {
+        setIdToken(null);
+        setIsInitializedFromServer(false);
+        setAgents([]);
+        setTasks([]);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Fetch initial state from database (Cloud SQL) on login
+  useEffect(() => {
+    if (!idToken) return;
+
+    let active = true;
+    const fetchDBState = async () => {
       try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error parsing tasks from localStorage", e);
+        setSyncing(true);
+        setSyncError(null);
+        const res = await fetch("/api/sync", {
+          headers: {
+            "Authorization": `Bearer ${idToken}`
+          }
+        });
+        if (!res.ok) {
+          throw new Error("Não foi possível sincronizar o estado inicial do Cloud SQL.");
+        }
+        const data = await res.json();
+        if (active) {
+          if (data.agents) setAgents(data.agents);
+          if (data.tasks) setTasks(data.tasks);
+          setIsInitializedFromServer(true);
+        }
+      } catch (err: any) {
+        console.error("Fetch DB state error:", err);
+        if (active) {
+          setSyncError(err.message || "Erro de sincronização inicial");
+        }
+      } finally {
+        if (active) {
+          setSyncing(false);
+        }
       }
-    }
-    return [
-      {
-        id: "task-1",
-        title: "Refactor Auth Module for V3 Microservices",
-        agentId: "agent-2",
-        priority: "HIGH",
-        status: "TO_DO",
-      },
-      {
-        id: "task-2",
-        title: "Integrate Stripe Webhooks with local retry loop",
-        agentId: "agent-2",
-        priority: "MEDIUM",
-        status: "TO_DO",
-      },
-      {
-        id: "task-3",
-        title: "SEO Optimization & Content Marketing Copy kit",
-        agentId: "agent-3",
-        priority: "URGENT",
-        status: "IN_PROGRESS",
-      },
-      {
-        id: "task-4",
-        title: "Dockerize Core Orchestrator Agents for deployment",
-        agentId: "agent-1",
-        priority: "HIGH",
-        status: "DONE",
-      },
-      {
-        id: "task-5",
-        title: "Write interactive simulation schemas",
-        agentId: "agent-1",
-        priority: "LOW",
-        status: "REVIEW",
+    };
+
+    fetchDBState();
+    return () => {
+      active = false;
+    };
+  }, [idToken]);
+
+  // Save changes to database (Cloud SQL) whenever local state updates
+  useEffect(() => {
+    if (!idToken || !isInitializedFromServer) return;
+
+    const controller = new AbortController();
+    const saveDBState = async () => {
+      try {
+        setSyncing(true);
+        const res = await fetch("/api/sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${idToken}`
+          },
+          body: JSON.stringify({ agents, tasks }),
+          signal: controller.signal
+        });
+        if (!res.ok) {
+          throw new Error("Falha ao salvar as alterações no Cloud SQL.");
+        }
+        setSyncError(null);
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          console.error("Save state error:", err);
+          setSyncError(err.message || "Falha na persistência automática.");
+        }
+      } finally {
+        setSyncing(false);
       }
-    ];
-  });
+    };
 
-  // Automatic persistence in localStorage
-  useEffect(() => {
-    localStorage.setItem("rota_labs_agents", JSON.stringify(agents));
-  }, [agents]);
+    const timeout = setTimeout(() => {
+      saveDBState();
+    }, 1000);
 
-  useEffect(() => {
-    localStorage.setItem("rota_labs_tasks", JSON.stringify(tasks));
-  }, [tasks]);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [agents, tasks, idToken, isInitializedFromServer]);
 
   // Histórico de missões concluídas por agent ao longo do tempo (Dados do gráfico de linhas)
   const [performanceData, setPerformanceData] = useState([
@@ -261,6 +289,126 @@ export default function App() {
   const [terminalInput, setTerminalInput] = useState("");
   const terminalBottomRef = useRef<HTMLDivElement>(null);
   const bottomTerminalBottomRef = useRef<HTMLDivElement>(null);
+
+  // Drag and Drop States and Handlers
+  const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+  const [draggedOverTaskId, setDraggedOverTaskId] = useState<string | null>(null);
+  const [isDraggingOverColumn, setIsDraggingOverColumn] = useState<Record<TaskStatus, boolean>>({
+    TO_DO: false,
+    IN_PROGRESS: false,
+    REVIEW: false,
+    DONE: false,
+  });
+
+  const handleDragStart = (e: React.DragEvent, taskId: string) => {
+    setDraggedTaskId(taskId);
+    e.dataTransfer.setData("text/plain", taskId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragEnd = () => {
+    setDraggedTaskId(null);
+    setDraggedOverTaskId(null);
+    setIsDraggingOverColumn({
+      TO_DO: false,
+      IN_PROGRESS: false,
+      REVIEW: false,
+      DONE: false,
+    });
+  };
+
+  const handleDragOverCard = (e: React.DragEvent, taskId: string) => {
+    e.preventDefault();
+    if (draggedTaskId && draggedTaskId !== taskId) {
+      setDraggedOverTaskId(taskId);
+    }
+  };
+
+  const handleDragLeaveCard = () => {
+    setDraggedOverTaskId(null);
+  };
+
+  const handleDropOnCard = (e: React.DragEvent, targetTaskId: string, targetStatus: TaskStatus) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const id = e.dataTransfer.getData("text/plain") || draggedTaskId;
+    if (id) {
+      handleDropTask(id, targetStatus, targetTaskId);
+    }
+    handleDragEnd();
+  };
+
+  const handleDragOverColumn = (e: React.DragEvent, status: TaskStatus) => {
+    e.preventDefault();
+    setIsDraggingOverColumn(prev => ({ ...prev, [status]: true }));
+  };
+
+  const handleDragLeaveColumn = (status: TaskStatus) => {
+    setIsDraggingOverColumn(prev => ({ ...prev, [status]: false }));
+  };
+
+  const handleDropOnColumn = (e: React.DragEvent, status: TaskStatus) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("text/plain") || draggedTaskId;
+    if (id) {
+      handleDropTask(id, status);
+    }
+    handleDragEnd();
+  };
+
+  const handleDropTask = (draggedId: string, targetStatus: TaskStatus, targetTaskId?: string) => {
+    if (!draggedId) return;
+
+    setTasks((prev) => {
+      const next = [...prev];
+      const draggedIndex = next.findIndex(t => t.id === draggedId);
+      if (draggedIndex === -1) return prev;
+
+      const draggedTask = { ...next[draggedIndex], status: targetStatus };
+
+      // Remove from old position
+      next.splice(draggedIndex, 1);
+
+      if (targetTaskId) {
+        // If targetTaskId is provided, insert immediately before it!
+        const targetIndex = next.findIndex(t => t.id === targetTaskId);
+        if (targetIndex !== -1) {
+          next.splice(targetIndex, 0, draggedTask);
+        } else {
+          next.push(draggedTask);
+        }
+      } else {
+        next.push(draggedTask);
+      }
+
+      // Log status transition & performance update
+      const originalTask = prev[draggedIndex];
+      if (originalTask.status !== targetStatus) {
+        const now = new Date();
+        const timeStr = now.toTimeString().split(" ")[0];
+        setTimeout(() => {
+          setLogs((prevLogs) => [
+            ...prevLogs,
+            {
+              id: `log-dynamic-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+              timestamp: timeStr,
+              type: "SYNC",
+              message: `Missão '${originalTask.title}' movida para [${targetStatus}] via Drag & Drop.`,
+            }
+          ]);
+        }, 50);
+
+        // Update performance history
+        if (targetStatus === "DONE") {
+          updatePerformanceHistory(originalTask.agentId, 1);
+        } else if (originalTask.status === "DONE") {
+          updatePerformanceHistory(originalTask.agentId, -1);
+        }
+      }
+
+      return next;
+    });
+  };
 
   // Financial status states
   const totalBudgetLimit = 100000;
@@ -905,6 +1053,74 @@ export default function App() {
 
   const themeStyles = getThemeClasses();
 
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#020617] flex flex-col items-center justify-center">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 rounded-full border-4 border-indigo-500 border-t-transparent animate-spin"></div>
+          <p className="text-slate-400 font-mono text-xs">Inicializando Rota Labs...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-[#020617] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))] flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-900/60 border border-slate-800/80 rounded-2xl p-8 backdrop-blur-xl shadow-2xl relative overflow-hidden">
+          {/* Subtle decorative glow */}
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-1 bg-gradient-to-r from-[#7C3AED] via-[#3B82F6] to-pink-500 rounded-full blur-sm"></div>
+
+          <div className="flex flex-col items-center text-center space-y-6">
+            {/* Logo */}
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-[#7C3AED] to-[#3B82F6] flex items-center justify-center shadow-[0_0_25px_rgba(124,58,237,0.4)]">
+              <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+            </div>
+
+            <div>
+              <h1 className="text-2xl font-extrabold text-white tracking-tight">ROTA <span className="text-indigo-400">LABS</span></h1>
+              <p className="text-xs text-slate-400 font-mono mt-1 uppercase tracking-widest">Orchestrator Platform v2.1</p>
+            </div>
+
+            <div className="text-slate-300 text-sm leading-relaxed max-w-xs">
+              Bem-vindo ao centro ágil de orquestração de sub-agentes inteligentes. Conecte-se para sincronizar missões no <span className="text-indigo-400 font-semibold">Google Cloud SQL</span> em tempo real.
+            </div>
+
+            {/* Error display if any */}
+            {syncError && (
+              <div className="w-full p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{syncError}</span>
+              </div>
+            )}
+
+            {/* Login Button */}
+            <button
+              onClick={async () => {
+                try {
+                  await signInWithPopup(auth, googleAuthProvider);
+                } catch (e: any) {
+                  console.error("Login failed:", e);
+                  setSyncError(e.message || "Erro ao autenticar com o Google.");
+                }
+              }}
+              className="w-full flex items-center justify-center space-x-2 py-3 bg-white text-slate-900 font-semibold rounded-xl hover:bg-slate-100 transition-all cursor-pointer shadow-lg hover:scale-[1.01]"
+            >
+              <LogIn className="w-4 h-4 text-slate-900" />
+              <span>Entrar com o Google</span>
+            </button>
+
+            <div className="text-[10px] text-slate-500 font-mono">
+              Autenticação segura via Firebase Auth
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div id="orchestrator-app" className={`min-h-screen flex flex-col md:flex-row overflow-hidden ${themeStyles.wrapper}`}>
       
@@ -1007,12 +1223,28 @@ export default function App() {
                 {activeTab === "specifications" && "Agile Blueprint & Specs"}
                 {activeTab === "settings" && "System Configuration"}
               </h1>
-              <span className="hidden sm:inline-block px-2 py-0.5 text-[10px] font-mono bg-emerald-500/20 text-emerald-400 rounded-full font-bold">
-                ONLINE
-              </span>
+              {/* Database connection status indicators */}
+              <div className="flex items-center space-x-1">
+                {syncing ? (
+                  <span className="flex items-center px-2 py-0.5 text-[10px] font-mono bg-indigo-500/10 text-indigo-400 rounded-full font-bold animate-pulse">
+                    <CloudLightning className="w-3 h-3 mr-1 animate-spin" />
+                    SYNCING
+                  </span>
+                ) : syncError ? (
+                  <span className="flex items-center px-2 py-0.5 text-[10px] font-mono bg-red-500/10 text-red-400 rounded-full font-bold" title={syncError}>
+                    <CloudOff className="w-3 h-3 mr-1" />
+                    OFFLINE
+                  </span>
+                ) : (
+                  <span className="flex items-center px-2 py-0.5 text-[10px] font-mono bg-emerald-500/15 text-emerald-400 rounded-full font-bold">
+                    <Cloud className="w-3 h-3 mr-1" />
+                    CLOUD SQL
+                  </span>
+                )}
+              </div>
             </div>
             <p className="hidden sm:block text-slate-400 text-xs">
-              System Uptime: 99.98% • Latency: 24ms • Version: 2.1.0-RC
+              {user ? `User: ${user.email}` : "Conectando..."} • Latency: 24ms • DB: Cloud SQL Active
             </p>
           </div>
 
@@ -1033,6 +1265,15 @@ export default function App() {
             >
               <PlusCircle className="w-4 h-4 mr-1 md:mr-1.5" />
               Contratar Agente
+            </button>
+
+            {/* Logout Button */}
+            <button
+              onClick={() => signOut(auth)}
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800/40 transition-all cursor-pointer"
+              title="Sair da Conta"
+            >
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </header>
@@ -1364,7 +1605,16 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                    <div 
+                      onDragOver={(e) => handleDragOverColumn(e, "TO_DO")}
+                      onDragLeave={() => handleDragLeaveColumn("TO_DO")}
+                      onDrop={(e) => handleDropOnColumn(e, "TO_DO")}
+                      className={`space-y-3 min-h-[300px] p-2 rounded-xl border border-dashed overflow-hidden relative transition-all duration-200 ${
+                        isDraggingOverColumn.TO_DO 
+                          ? "bg-indigo-950/20 border-indigo-500/50 shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] scale-[1.01]" 
+                          : "bg-slate-950/20 border-slate-800/40"
+                      }`}
+                    >
                       <AnimatePresence mode="popLayout">
                         {tasks.filter(t => t.status === "TO_DO").length === 0 ? (
                           <motion.p
@@ -1393,6 +1643,13 @@ export default function App() {
                                 onDelete={deleteTask}
                                 onMove={moveTaskStatus}
                                 onChangeStatus={changeTaskStatusDropdown}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={handleDragOverCard}
+                                onDragLeave={handleDragLeaveCard}
+                                onDrop={handleDropOnCard}
+                                isDragged={draggedTaskId === t.id}
+                                isHovered={draggedOverTaskId === t.id}
                               />
                             </motion.div>
                           ))
@@ -1412,7 +1669,16 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                    <div 
+                      onDragOver={(e) => handleDragOverColumn(e, "IN_PROGRESS")}
+                      onDragLeave={() => handleDragLeaveColumn("IN_PROGRESS")}
+                      onDrop={(e) => handleDropOnColumn(e, "IN_PROGRESS")}
+                      className={`space-y-3 min-h-[300px] p-2 rounded-xl border border-dashed overflow-hidden relative transition-all duration-200 ${
+                        isDraggingOverColumn.IN_PROGRESS 
+                          ? "bg-indigo-950/20 border-indigo-500/50 shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] scale-[1.01]" 
+                          : "bg-slate-950/20 border-slate-800/40"
+                      }`}
+                    >
                       <AnimatePresence mode="popLayout">
                         {tasks.filter(t => t.status === "IN_PROGRESS").length === 0 ? (
                           <motion.p
@@ -1441,6 +1707,13 @@ export default function App() {
                                 onDelete={deleteTask}
                                 onMove={moveTaskStatus}
                                 onChangeStatus={changeTaskStatusDropdown}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={handleDragOverCard}
+                                onDragLeave={handleDragLeaveCard}
+                                onDrop={handleDropOnCard}
+                                isDragged={draggedTaskId === t.id}
+                                isHovered={draggedOverTaskId === t.id}
                               />
                             </motion.div>
                           ))
@@ -1460,7 +1733,16 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                    <div 
+                      onDragOver={(e) => handleDragOverColumn(e, "REVIEW")}
+                      onDragLeave={() => handleDragLeaveColumn("REVIEW")}
+                      onDrop={(e) => handleDropOnColumn(e, "REVIEW")}
+                      className={`space-y-3 min-h-[300px] p-2 rounded-xl border border-dashed overflow-hidden relative transition-all duration-200 ${
+                        isDraggingOverColumn.REVIEW 
+                          ? "bg-indigo-950/20 border-indigo-500/50 shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] scale-[1.01]" 
+                          : "bg-slate-950/20 border-slate-800/40"
+                      }`}
+                    >
                       <AnimatePresence mode="popLayout">
                         {tasks.filter(t => t.status === "REVIEW").length === 0 ? (
                           <motion.p
@@ -1489,6 +1771,13 @@ export default function App() {
                                 onDelete={deleteTask}
                                 onMove={moveTaskStatus}
                                 onChangeStatus={changeTaskStatusDropdown}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={handleDragOverCard}
+                                onDragLeave={handleDragLeaveCard}
+                                onDrop={handleDropOnCard}
+                                isDragged={draggedTaskId === t.id}
+                                isHovered={draggedOverTaskId === t.id}
                               />
                             </motion.div>
                           ))
@@ -1508,7 +1797,16 @@ export default function App() {
                       </span>
                     </div>
 
-                    <div className="space-y-3 min-h-[300px] bg-slate-950/20 p-2 rounded-xl border border-dashed border-slate-800/40 overflow-hidden relative">
+                    <div 
+                      onDragOver={(e) => handleDragOverColumn(e, "DONE")}
+                      onDragLeave={() => handleDragLeaveColumn("DONE")}
+                      onDrop={(e) => handleDropOnColumn(e, "DONE")}
+                      className={`space-y-3 min-h-[300px] p-2 rounded-xl border border-dashed overflow-hidden relative transition-all duration-200 ${
+                        isDraggingOverColumn.DONE 
+                          ? "bg-indigo-950/20 border-indigo-500/50 shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] scale-[1.01]" 
+                          : "bg-slate-950/20 border-slate-800/40"
+                      }`}
+                    >
                       <AnimatePresence mode="popLayout">
                         {tasks.filter(t => t.status === "DONE").length === 0 ? (
                           <motion.p
@@ -1537,6 +1835,13 @@ export default function App() {
                                 onDelete={deleteTask}
                                 onMove={moveTaskStatus}
                                 onChangeStatus={changeTaskStatusDropdown}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                onDragOver={handleDragOverCard}
+                                onDragLeave={handleDragLeaveCard}
+                                onDrop={handleDropOnCard}
+                                isDragged={draggedTaskId === t.id}
+                                isHovered={draggedOverTaskId === t.id}
                               />
                             </motion.div>
                           ))
@@ -3011,9 +3316,30 @@ interface TaskCardProps {
   onDelete: (id: string) => void;
   onMove: (id: string, direction: "left" | "right") => void;
   onChangeStatus: (id: string, next: TaskStatus) => void;
+  onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd: () => void;
+  onDragOver: (e: React.DragEvent, id: string) => void;
+  onDragLeave: () => void;
+  onDrop: (e: React.DragEvent, id: string, status: TaskStatus) => void;
+  isDragged: boolean;
+  isHovered: boolean;
 }
 
-function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus }: TaskCardProps) {
+function TaskCard({ 
+  task, 
+  agents, 
+  themeStyles, 
+  onDelete, 
+  onMove, 
+  onChangeStatus,
+  onDragStart,
+  onDragEnd,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  isDragged,
+  isHovered
+}: TaskCardProps) {
   const responsibleAgent = agents.find(a => a.id === task.agentId);
 
   const getPriorityBadge = (p: Priority) => {
@@ -3031,17 +3357,32 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
   };
 
   return (
-    <div className={`p-4 rounded-xl border relative group transition-all duration-300 ${
-      task.status === "IN_PROGRESS" 
-        ? "bg-indigo-950/15 border-[#7C3AED]/40 shadow-[inset_0_0_15px_rgba(124,58,237,0.05)]" 
-        : "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80"
-    }`}>
+    <div 
+      draggable
+      onDragStart={(e) => onDragStart(e, task.id)}
+      onDragEnd={onDragEnd}
+      onDragOver={(e) => onDragOver(e, task.id)}
+      onDragLeave={onDragLeave}
+      onDrop={(e) => onDrop(e, task.id, task.status)}
+      className={`p-4 rounded-xl border relative group transition-all duration-300 cursor-grab active:cursor-grabbing ${
+        isDragged ? "opacity-30 border-dashed border-slate-700 bg-slate-950/40" : "hover:-translate-y-1 hover:shadow-[0_8px_20px_-3px_rgba(124,58,237,0.12)]"
+      } ${
+        isHovered ? "border-indigo-500 bg-indigo-950/20 scale-[1.02] shadow-[0_0_15px_rgba(124,58,237,0.15)]" : ""
+      } ${
+        task.status === "IN_PROGRESS" && !isDragged && !isHovered
+          ? "bg-indigo-950/15 border-[#7C3AED]/40 shadow-[inset_0_0_15px_rgba(124,58,237,0.05)]" 
+          : !isDragged && !isHovered ? "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80" : ""
+      }`}
+    >
       
       {/* Delete / Operations */}
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 select-none">
         {getPriorityBadge(task.priority)}
         <button 
-          onClick={() => onDelete(task.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(task.id);
+          }}
           className="opacity-60 hover:opacity-100 hover:text-red-400 p-1 rounded transition-all"
           title="Deletar missão"
         >
@@ -3049,10 +3390,10 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
         </button>
       </div>
 
-      <p className="text-xs font-semibold leading-relaxed mb-3">{task.title}</p>
+      <p className="text-xs font-semibold leading-relaxed mb-3 select-none">{task.title}</p>
 
       {/* Agent details */}
-      <div className="flex items-center justify-between pt-2.5 border-t border-slate-800/60 text-[11px]">
+      <div className="flex items-center justify-between pt-2.5 border-t border-slate-800/60 text-[11px] select-none">
         <div className="flex items-center space-x-1.5 text-slate-400">
           <div className="w-4 h-4 rounded-full bg-slate-800 flex items-center justify-center font-bold text-[8px] text-white">
             {responsibleAgent?.name.substring(0, 2).toUpperCase() || "A"}
@@ -3062,10 +3403,13 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
       </div>
 
       {/* Movement & Dropdown controller block */}
-      <div className="mt-3 pt-2.5 border-t border-slate-800/40 flex items-center justify-between gap-1">
+      <div className="mt-3 pt-2.5 border-t border-slate-800/40 flex items-center justify-between gap-1 select-none">
         {/* Left move */}
         <button
-          onClick={() => onMove(task.id, "left")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMove(task.id, "left");
+          }}
           className="p-1 bg-slate-800/60 hover:bg-slate-700 text-slate-300 rounded text-xs transition-all cursor-pointer"
           title="Mover para esquerda"
           disabled={task.status === "TO_DO"}
@@ -3076,7 +3420,10 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
         {/* Dynamic Select Status Controller */}
         <select 
           value={task.status}
-          onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
+          onChange={(e) => {
+            e.stopPropagation();
+            onChangeStatus(task.id, e.target.value as TaskStatus);
+          }}
           className="bg-slate-900 border border-slate-800 text-[9px] rounded px-1.5 py-0.5 text-white flex-1 cursor-pointer"
         >
           <option value="TO_DO">A Fazer</option>
@@ -3087,7 +3434,10 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
 
         {/* Right move */}
         <button
-          onClick={() => onMove(task.id, "right")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onMove(task.id, "right");
+          }}
           className="p-1 bg-slate-800/60 hover:bg-slate-700 text-slate-300 rounded text-xs transition-all cursor-pointer"
           title="Mover para direita"
           disabled={task.status === "DONE"}
