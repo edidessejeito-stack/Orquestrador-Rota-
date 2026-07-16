@@ -1,4 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
 import { 
   Layers, 
   Users, 
@@ -158,31 +168,40 @@ export default function App() {
     }
   ]);
 
+  // Histórico de missões concluídas por agent ao longo do tempo (Dados do gráfico de linhas)
+  const [performanceData, setPerformanceData] = useState([
+    { name: "Semana 1", "Evelyn Rota": 2, "Atlas Bot": 3, "Nova Pen": 1 },
+    { name: "Semana 2", "Evelyn Rota": 3, "Atlas Bot": 5, "Nova Pen": 3 },
+    { name: "Semana 3", "Evelyn Rota": 4, "Atlas Bot": 8, "Nova Pen": 4 },
+    { name: "Semana 4", "Evelyn Rota": 5, "Atlas Bot": 10, "Nova Pen": 6 },
+    { name: "Semana 5", "Evelyn Rota": 6, "Atlas Bot": 12, "Nova Pen": 8 },
+  ]);
+
   // Terminal state
   const [logs, setLogs] = useState<LogEntry[]>([
     {
       id: "log-1",
       timestamp: "12:04:15",
       type: "INFO",
-      message: "Orchestrator System initialized successfully.",
+      message: "Sistema Orchestrator inicializado com sucesso.",
     },
     {
       id: "log-2",
       timestamp: "12:04:22",
       type: "SYNC",
-      message: "Atlas Bot loaded module auth-validator-v3 (83ms).",
+      message: "Atlas Bot carregou o módulo auth-validator-v3 (83ms).",
     },
     {
       id: "log-3",
       timestamp: "12:04:31",
       type: "TASK",
-      message: "Nova Pen starts writing high-conversion copy for Rota Labs launcher.",
+      message: "Nova Pen iniciou a redação de copy de alta conversão para o launcher da Rota Labs.",
     },
     {
       id: "log-4",
       timestamp: "12:04:35",
       type: "SUCCESS",
-      message: "Task 'Dockerize Core Orchestrator Agents' moved to status [DONE].",
+      message: "Missão 'Dockerizar Agentes Orquestradores Principais para deploy' movida para o status [CONCLUÍDO].",
     }
   ]);
   const [isLogRunning, setIsLogRunning] = useState(true);
@@ -206,17 +225,17 @@ export default function App() {
 
   // Preset live logs to generate
   const logPool = [
-    { type: "INFO" as const, message: "System resource check: Cognitive load at 42%, all processes healthy." },
-    { type: "TASK" as const, message: "CEO Agent Evelyn Rota performs security audit on external webhooks." },
-    { type: "SYNC" as const, message: "Synchronizing state vectors across 3 sub-agents to avoid logical collisions." },
-    { type: "SUCCESS" as const, message: "Senior Dev Atlas Bot fixed 4 potential type errors in user endpoints." },
-    { type: "ERROR" as const, message: "Warning: High memory consumption on microservice 'node-agent-executor'." },
-    { type: "INFO" as const, message: "Rota Labs Orchestrator: Automatic cognitive load balancing complete." },
-    { type: "TASK" as const, message: "Copywriter Agent Nova Pen generated 3 alternative taglines for the pricing page." },
-    { type: "SUCCESS" as const, message: "Verified code integrity of auth-validator-v3 with 100% test coverage." },
-    { type: "SYNC" as const, message: "Neural parameters consolidated across model context boundaries." },
-    { type: "INFO" as const, message: "Database read latency minimized: 4ms cache hit rate at 99.2%." },
-    { type: "TASK" as const, message: "Atlas Bot initialized local code analysis for Stripe Webhook integration." },
+    { type: "INFO" as const, message: "Verificação de recursos do sistema: Carga cognitiva em 42%, todos os processos saudáveis." },
+    { type: "TASK" as const, message: "CEO Agent Evelyn Rota realiza auditoria de segurança em webhooks externos." },
+    { type: "SYNC" as const, message: "Sincronizando vetores de estado entre 3 sub-agents para evitar colisões lógicas." },
+    { type: "SUCCESS" as const, message: "Senior Dev Atlas Bot corrigiu 4 erros de tipo potenciais nos endpoints de usuários." },
+    { type: "ERROR" as const, message: "Aviso: Alto consumo de memória no microsserviço 'node-agent-executor'." },
+    { type: "INFO" as const, message: "Rota Labs Orchestrator: Balanceamento de carga cognitiva automático concluído." },
+    { type: "TASK" as const, message: "Copywriter Agent Nova Pen gerou 3 slogans alternativos para a página de preços." },
+    { type: "SUCCESS" as const, message: "Integridade do código de auth-validator-v3 verificada com 100% de cobertura de testes." },
+    { type: "SYNC" as const, message: "Parâmetros neurais consolidados através dos limites de contexto do modelo." },
+    { type: "INFO" as const, message: "Latência de leitura do banco de dados minimizada: cache hit de 4ms com taxa de 99.2%." },
+    { type: "TASK" as const, message: "Atlas Bot inicializou a análise de código local para integração de Webhook do Stripe." },
   ];
 
   // Simulated live logs addition
@@ -353,6 +372,24 @@ export default function App() {
     setIsCreateTaskOpen(false);
   };
 
+  // Helper para atualizar histórico de missões concluídas no gráfico de linhas
+  const updatePerformanceHistory = (agentId: string, delta: number) => {
+    const agent = agents.find(a => a.id === agentId);
+    if (!agent) return;
+    
+    setPerformanceData(prev => {
+      const copy = [...prev];
+      if (copy.length === 0) return prev;
+      const lastIndex = copy.length - 1;
+      const currentVal = copy[lastIndex][agent.name] || 0;
+      copy[lastIndex] = {
+        ...copy[lastIndex],
+        [agent.name]: Math.max(0, currentVal + delta)
+      };
+      return copy;
+    });
+  };
+
   // Change task status dynamically
   const moveTaskStatus = (taskId: string, direction: "left" | "right") => {
     const statuses: TaskStatus[] = ["TO_DO", "IN_PROGRESS", "REVIEW", "DONE"];
@@ -381,6 +418,13 @@ export default function App() {
                 }
               ]);
             }, 50);
+
+            // Atualizar histórico de performance
+            if (nextStatus === "DONE") {
+              updatePerformanceHistory(t.agentId, 1);
+            } else if (t.status === "DONE") {
+              updatePerformanceHistory(t.agentId, -1);
+            }
           }
 
           return { ...t, status: nextStatus };
@@ -408,6 +452,13 @@ export default function App() {
                 }
               ]);
             }, 50);
+
+            // Atualizar histórico de performance
+            if (newStatus === "DONE") {
+              updatePerformanceHistory(t.agentId, 1);
+            } else if (t.status === "DONE") {
+              updatePerformanceHistory(t.agentId, -1);
+            }
           }
           return { ...t, status: newStatus };
         }
@@ -431,6 +482,115 @@ export default function App() {
         type: "ERROR",
         message: `Missão deletada permanentemente: '${taskToDelete?.title || taskId}'.`,
       }
+    ]);
+  };
+
+  // Zerar e limpar toda a base de testes para iniciar do zero
+  const handleResetAll = () => {
+    setTasks([]);
+    setAgents([]);
+    setLogs([
+      {
+        id: `log-reset-${Date.now()}`,
+        timestamp: new Date().toTimeString().split(" ")[0],
+        type: "INFO",
+        message: "Orchestrator zerado com sucesso. Todos os agents e missões de teste foram limpos.",
+      }
+    ]);
+    setPerformanceData([
+      { name: "Semana 1" },
+      { name: "Semana 2" },
+      { name: "Semana 3" },
+      { name: "Semana 4" },
+      { name: "Semana 5" },
+    ]);
+  };
+
+  // Restaurar dados de demonstração completos
+  const handleRestoreDemoData = () => {
+    setAgents([
+      {
+        id: "agent-1",
+        name: "Evelyn Rota",
+        role: "CEO & Orchestrator",
+        status: "WORKING",
+        instruction: "Coordenadora principal dos sistemas da Rota Labs, resolvendo gargalos lógicos.",
+        budget: 5000,
+        avatarBg: "from-purple-600 to-pink-500",
+      },
+      {
+        id: "agent-2",
+        name: "Atlas Bot",
+        role: "Senior Dev",
+        status: "WAKING",
+        instruction: "Agente de otimização de arquitetura de microsserviços Rust, TypeScript e segurança.",
+        budget: 3500,
+        avatarBg: "from-blue-600 to-indigo-500",
+      },
+      {
+        id: "agent-3",
+        name: "Nova Pen",
+        role: "Copywriter & Marketing",
+        status: "SLEEPING",
+        instruction: "Especialista em redação persuasiva (copy), SEO e roteiros de campanhas virais.",
+        budget: 2000,
+        avatarBg: "from-pink-500 to-rose-400",
+      }
+    ]);
+
+    setTasks([
+      {
+        id: "task-1",
+        title: "Refactor Auth Module for V3 Microservices",
+        agentId: "agent-2",
+        priority: "HIGH",
+        status: "TO_DO",
+      },
+      {
+        id: "task-2",
+        title: "Integrate Stripe Webhooks with local retry loop",
+        agentId: "agent-2",
+        priority: "MEDIUM",
+        status: "TO_DO",
+      },
+      {
+        id: "task-3",
+        title: "SEO Optimization & Content Marketing Copy kit",
+        agentId: "agent-3",
+        priority: "URGENT",
+        status: "IN_PROGRESS",
+      },
+      {
+        id: "task-4",
+        title: "Dockerize Core Orchestrator Agents for deployment",
+        agentId: "agent-1",
+        priority: "HIGH",
+        status: "DONE",
+      },
+      {
+        id: "task-5",
+        title: "Write interactive simulation schemas",
+        agentId: "agent-1",
+        priority: "LOW",
+        status: "REVIEW",
+      }
+    ]);
+
+    setLogs([
+      {
+        id: `log-demo-${Date.now()}`,
+        timestamp: new Date().toTimeString().split(" ")[0],
+        type: "SUCCESS",
+        message: "Dados de demonstração do Orchestrator restaurados com sucesso.",
+      }
+    ]);
+
+    setPerformanceData([
+      { name: "Semana 1", "Evelyn Rota": 2, "Atlas Bot": 3, "Nova Pen": 1 },
+      { name: "Semana 2", "Evelyn Rota": 3, "Atlas Bot": 5, "Nova Pen": 3 },
+      { name: "Semana 3", "Evelyn Rota": 4, "Atlas Bot": 8, "Nova Pen": 4 },
+      { name: "Semana 4", "Evelyn Rota": 5, "Atlas Bot": 10, "Nova Pen": 6 },
+      { name: "Semana 5", "Evelyn Rota": 6, "Atlas Bot": 12, "Nova Pen": 8 },
     ]);
   };
 
@@ -730,25 +890,48 @@ export default function App() {
 
               {/* DYNAMIC KANBAN BOARD */}
               <div className="space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h3 className="text-lg font-bold flex items-center">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2.5 animate-pulse"></span>
-                    Quadro Kanban de Operações
-                  </h3>
-                  
-                  {/* MOBILE TABS SWITCHER FOR KANBAN */}
-                  <div className="flex md:hidden bg-slate-900 border border-slate-800 p-1 rounded-xl">
-                    {(["TO_DO", "IN_PROGRESS", "REVIEW", "DONE"] as TaskStatus[]).map((st) => (
-                      <button
-                        key={st}
-                        onClick={() => setMobileKanbanTab(st)}
-                        className={`flex-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
-                          mobileKanbanTab === st ? "bg-[#7C3AED] text-white" : "text-slate-400"
-                        }`}
-                      >
-                        {st.replace("_", " ")}
-                      </button>
-                    ))}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/60 pb-3">
+                  <div className="flex items-center space-x-3">
+                    <h3 className="text-lg font-bold flex items-center">
+                      <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 mr-2.5 animate-pulse"></span>
+                      Quadro Kanban de Operações
+                    </h3>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={handleResetAll}
+                      className="flex items-center px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      title="Zera a base de testes excluindo todos os agents, logs e missões para começar limpo."
+                    >
+                      <Trash2 className="w-3.5 h-3.5 mr-1" />
+                      Apagar Base de Teste
+                    </button>
+                    
+                    <button
+                      onClick={handleRestoreDemoData}
+                      className="flex items-center px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/20 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                      title="Restaura os agentes e as missões originais de demonstração."
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 mr-1" />
+                      Restaurar Demo
+                    </button>
+
+                    {/* MOBILE TABS SWITCHER FOR KANBAN */}
+                    <div className="flex md:hidden bg-slate-900 border border-slate-800 p-1 rounded-xl">
+                      {(["TO_DO", "IN_PROGRESS", "REVIEW", "DONE"] as TaskStatus[]).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() => setMobileKanbanTab(st)}
+                          className={`text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition-all ${
+                            mobileKanbanTab === st ? "bg-[#7C3AED] text-white" : "text-slate-400"
+                          }`}
+                        >
+                          {st === "TO_DO" ? "A Fazer" : st === "IN_PROGRESS" ? "Em Progresso" : st === "REVIEW" ? "Revisão" : "Concluído"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -759,7 +942,7 @@ export default function App() {
                   <div className={`flex flex-col space-y-4 ${mobileKanbanTab !== "TO_DO" ? "hidden md:flex" : "flex"}`}>
                     <div className="flex items-center justify-between px-2 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 pb-2">
                       <span className="flex items-center">
-                        <span className="w-2 h-2 rounded-full bg-slate-500 mr-2"></span> To Do
+                        <span className="w-2 h-2 rounded-full bg-slate-500 mr-2"></span> A Fazer
                       </span>
                       <span className="px-2 py-0.5 bg-slate-800 rounded text-white text-[10px]">
                         {tasks.filter(t => t.status === "TO_DO").length}
@@ -789,7 +972,7 @@ export default function App() {
                   <div className={`flex flex-col space-y-4 ${mobileKanbanTab !== "IN_PROGRESS" ? "hidden md:flex" : "flex"}`}>
                     <div className="flex items-center justify-between px-2 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 pb-2">
                       <span className="flex items-center">
-                        <span className="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-ping"></span> In Progress
+                        <span className="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-ping"></span> Em Progresso
                       </span>
                       <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[10px]">
                         {tasks.filter(t => t.status === "IN_PROGRESS").length}
@@ -819,7 +1002,7 @@ export default function App() {
                   <div className={`flex flex-col space-y-4 ${mobileKanbanTab !== "REVIEW" ? "hidden md:flex" : "flex"}`}>
                     <div className="flex items-center justify-between px-2 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 pb-2">
                       <span className="flex items-center">
-                        <span className="w-2 h-2 rounded-full bg-purple-500 mr-2"></span> Review
+                        <span className="w-2 h-2 rounded-full bg-purple-500 mr-2"></span> Revisão
                       </span>
                       <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded text-[10px]">
                         {tasks.filter(t => t.status === "REVIEW").length}
@@ -849,7 +1032,7 @@ export default function App() {
                   <div className={`flex flex-col space-y-4 ${mobileKanbanTab !== "DONE" ? "hidden md:flex" : "flex"}`}>
                     <div className="flex items-center justify-between px-2 text-xs font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800/80 pb-2">
                       <span className="flex items-center">
-                        <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Done
+                        <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Concluído
                       </span>
                       <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px]">
                         {tasks.filter(t => t.status === "DONE").length}
@@ -1076,6 +1259,81 @@ export default function App() {
                     </div>
                   );
                 })}
+              </div>
+
+              {/* DESEMPENHO DOS AGENTES - GRÁFICO DE LINHAS */}
+              <div className={`p-6 rounded-2xl ${themeStyles.card} space-y-4`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/60 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold flex items-center">
+                      <span className="w-2.5 h-2.5 rounded-full bg-pink-500 mr-2.5 animate-pulse"></span>
+                      Desempenho dos Agents ao Longo do Tempo
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">Missões concluídas (Concluído) acumuladas por agent por período.</p>
+                  </div>
+                  
+                  <div className="text-[10px] font-mono bg-slate-950/40 border border-slate-800 rounded-lg px-2.5 py-1 text-slate-400">
+                    Sincronizado • Tempo Real
+                  </div>
+                </div>
+
+                <div className="h-72 w-full pt-2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={performanceData}
+                      margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" opacity={0.3} />
+                      <XAxis 
+                        dataKey="name" 
+                        stroke={theme === "LIGHT" ? "#475569" : "#94a3b8"} 
+                        fontSize={11} 
+                        tickLine={false}
+                      />
+                      <YAxis 
+                        stroke={theme === "LIGHT" ? "#475569" : "#94a3b8"} 
+                        fontSize={11} 
+                        tickLine={false}
+                        allowDecimals={false}
+                      />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: theme === "LIGHT" ? "#ffffff" : "#0f172a", 
+                          borderColor: theme === "LIGHT" ? "#cbd5e1" : "#1e293b",
+                          borderRadius: "12px",
+                          color: theme === "LIGHT" ? "#0f172a" : "#f1f5f9",
+                          fontSize: "11px"
+                        }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ fontSize: "11px", paddingTop: "10px" }} 
+                      />
+                      {agents.map((agent, idx) => {
+                        const colors = [
+                          "#EC4899", // Rosa vibrante
+                          "#3B82F6", // Azul royal
+                          "#7C3AED", // Roxo vibrante
+                          "#10B981", // Esmeralda
+                          "#F59E0B", // Âmbar
+                          "#EF4444", // Vermelho
+                          "#06B6D4"  // Ciano
+                        ];
+                        const lineColor = colors[idx % colors.length];
+                        return (
+                          <Line 
+                            key={agent.id}
+                            type="monotone" 
+                            dataKey={agent.name} 
+                            stroke={lineColor} 
+                            strokeWidth={3}
+                            activeDot={{ r: 8 }}
+                            dot={{ r: 4 }}
+                          />
+                        );
+                      })}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           )}
@@ -1693,10 +1951,10 @@ export default function App() {
                   onChange={(e) => setTaskForm({...taskForm, status: e.target.value as TaskStatus})}
                   className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
                 >
-                  <option value="TO_DO">To Do</option>
-                  <option value="IN_PROGRESS">In Progress</option>
-                  <option value="REVIEW">Review</option>
-                  <option value="DONE">Done</option>
+                  <option value="TO_DO">A Fazer</option>
+                  <option value="IN_PROGRESS">Em Progresso</option>
+                  <option value="REVIEW">Revisão</option>
+                  <option value="DONE">Concluído</option>
                 </select>
               </div>
 
@@ -1741,14 +1999,14 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
   const getPriorityBadge = (p: Priority) => {
     switch (p) {
       case "LOW":
-        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeLow}`}>Low</span>;
+        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeLow}`}>Baixa</span>;
       case "HIGH":
-        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeHigh}`}>High</span>;
+        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeHigh}`}>Alta</span>;
       case "URGENT":
-        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeUrgent}`}>Urgent</span>;
+        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeUrgent}`}>Urgente</span>;
       case "MEDIUM":
       default:
-        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeMed}`}>Medium</span>;
+        return <span className={`px-2 py-0.5 text-[9px] rounded font-bold uppercase ${themeStyles.badgeMed}`}>Média</span>;
     }
   };
 
@@ -1801,10 +2059,10 @@ function TaskCard({ task, agents, themeStyles, onDelete, onMove, onChangeStatus 
           onChange={(e) => onChangeStatus(task.id, e.target.value as TaskStatus)}
           className="bg-slate-900 border border-slate-800 text-[9px] rounded px-1.5 py-0.5 text-white flex-1 cursor-pointer"
         >
-          <option value="TO_DO">To Do</option>
-          <option value="IN_PROGRESS">In Progress</option>
-          <option value="REVIEW">Review</option>
-          <option value="DONE">Done</option>
+          <option value="TO_DO">A Fazer</option>
+          <option value="IN_PROGRESS">Em Progresso</option>
+          <option value="REVIEW">Revisão</option>
+          <option value="DONE">Concluído</option>
         </select>
 
         {/* Right move */}
@@ -1828,21 +2086,21 @@ function AgentStatusBadge({ status }: { status: AgentStatus }) {
       return (
         <span className="flex items-center space-x-1 bg-purple-500/20 text-purple-400 border border-purple-500/40 px-2 py-1 rounded text-[9px] font-extrabold uppercase animate-pulse">
           <span className="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-          <span>WORKING</span>
+          <span>TRABALHANDO</span>
         </span>
       );
     case "WAKING":
       return (
         <span className="flex items-center space-x-1 bg-blue-500/20 text-blue-400 border border-blue-500/40 px-2 py-1 rounded text-[9px] font-extrabold uppercase">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping"></span>
-          <span>WAKING</span>
+          <span>DESPERTANDO</span>
         </span>
       );
     case "SLEEPING":
     default:
       return (
         <span className="flex items-center space-x-1 bg-slate-800 text-slate-400 border border-slate-700 px-2 py-1 rounded text-[9px] font-bold uppercase">
-          <span>SLEEPING</span>
+          <span>EM REPOUSO</span>
         </span>
       );
   }
