@@ -9,6 +9,9 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 import { 
   Layers, 
@@ -1303,40 +1306,173 @@ export default function App() {
         <main className="flex-1 p-4 md:p-8">
           
           {/* ORCHESTRATOR DASHBOARD TAB */}
-          {activeTab === "orchestrator" && (
-            <div className="space-y-6">
-              
-              {/* STATUS CARDS CAROUSEL / GRID */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Agentes Operando</p>
-                  <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-purple-500">
-                    {agents.filter(a => a.status === "WORKING").length} <span className="text-xs text-slate-400">/ {agents.length}</span>
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-2">Pulsando em alto processamento</p>
+          {activeTab === "orchestrator" && (() => {
+            const todayStr = new Date().toISOString().split("T")[0];
+            const doneTasksCount = tasks.filter(t => t.status === "DONE").length;
+            const inProgressTasksCount = tasks.filter(t => t.status === "IN_PROGRESS").length;
+            const overdueTasksCount = tasks.filter(t => {
+              if (t.status === "DONE" || !t.dueDate) return false;
+              return t.dueDate < todayStr;
+            }).length;
+            const pendingTasksCount = tasks.filter(t => {
+              if (t.status === "DONE" || t.status === "IN_PROGRESS") return false;
+              if (t.dueDate && t.dueDate < todayStr) return false;
+              return true;
+            }).length;
+            const totalTasksCount = tasks.length;
+
+            return (
+              <div className="space-y-6">
+                
+                {/* TOP DASHBOARD HERO ROW */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* STATUS CARDS GRID (Left 2/3) */}
+                  <div className="lg:col-span-2 grid grid-cols-2 gap-4">
+                    <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Agentes Operando</p>
+                      <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-purple-500">
+                        {agents.filter(a => a.status === "WORKING").length} <span className="text-xs text-slate-400">/ {agents.length}</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-2">Pulsando em alto processamento</p>
+                    </div>
+                    <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Missões Pendentes</p>
+                      <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-blue-400">
+                        {tasks.filter(t => t.status !== "DONE").length} <span className="text-xs text-slate-400">ativas</span>
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-2">Do To-Do ao Review</p>
+                    </div>
+                    <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Orçamento Consumido</p>
+                      <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-pink-500">
+                        ${totalSpent.toLocaleString()}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-2">Limite: $100,000</p>
+                    </div>
+                    <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
+                      <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Fator de Vazão</p>
+                      <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-emerald-400">
+                        {tasks.length > 0 ? Math.round((tasks.filter(t => t.status === "DONE").length / tasks.length) * 100) : 0}%
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-2">Taxa de conclusão geral</p>
+                    </div>
+                  </div>
+
+                  {/* DONUT CHART WORKFLOW CARD */}
+                  <div className={`p-5 rounded-2xl ${themeStyles.card} flex flex-col justify-between border border-slate-800/80`}>
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs text-slate-400 font-bold uppercase tracking-wider flex items-center">
+                          <Activity className="w-4 h-4 mr-1.5 text-indigo-400 animate-pulse" />
+                          Fluxo de Trabalho
+                        </h4>
+                        <span className="text-[10px] font-mono text-slate-500 bg-slate-950/40 border border-slate-800 rounded px-1.5 py-0.5">
+                          Total: {totalTasksCount}
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-12 gap-4 items-center">
+                        {/* Left: Recharts Pie Chart */}
+                        <div className="col-span-5 h-28 relative flex items-center justify-center">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  { name: "Concluídas", value: doneTasksCount, color: "#10B981" },
+                                  { name: "Em Progresso", value: inProgressTasksCount, color: "#3B82F6" },
+                                  { name: "Atrasadas", value: overdueTasksCount, color: "#EF4444" },
+                                  { name: "Pendentes", value: pendingTasksCount, color: "#6366F1" },
+                                ].filter(d => d.value > 0).length > 0 ? [
+                                  { name: "Concluídas", value: doneTasksCount, color: "#10B981" },
+                                  { name: "Em Progresso", value: inProgressTasksCount, color: "#3B82F6" },
+                                  { name: "Atrasadas", value: overdueTasksCount, color: "#EF4444" },
+                                  { name: "Pendentes", value: pendingTasksCount, color: "#6366F1" },
+                                ].filter(d => d.value > 0) : [
+                                  { name: "Sem Tarefas", value: 1, color: "#334155" }
+                                ]}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={32}
+                                outerRadius={46}
+                                paddingAngle={2}
+                                dataKey="value"
+                              >
+                                {([
+                                  { name: "Concluídas", value: doneTasksCount, color: "#10B981" },
+                                  { name: "Em Progresso", value: inProgressTasksCount, color: "#3B82F6" },
+                                  { name: "Atrasadas", value: overdueTasksCount, color: "#EF4444" },
+                                  { name: "Pendentes", value: pendingTasksCount, color: "#6366F1" },
+                                ].filter(d => d.value > 0).length > 0 ? [
+                                  { name: "Concluídas", value: doneTasksCount, color: "#10B981" },
+                                  { name: "Em Progresso", value: inProgressTasksCount, color: "#3B82F6" },
+                                  { name: "Atrasadas", value: overdueTasksCount, color: "#EF4444" },
+                                  { name: "Pendentes", value: pendingTasksCount, color: "#6366F1" },
+                                ].filter(d => d.value > 0) : [
+                                  { name: "Sem Tarefas", value: 1, color: "#334155" }
+                                ]).map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                contentStyle={{ backgroundColor: '#090d16', borderColor: '#1e293b', borderRadius: '8px' }}
+                                itemStyle={{ color: '#f8fafc', fontSize: '10px', fontFamily: 'monospace' }}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          {/* Center Value */}
+                          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                            <span className="text-sm font-extrabold font-mono text-white">
+                              {totalTasksCount > 0 ? Math.round((doneTasksCount / totalTasksCount) * 100) : 0}%
+                            </span>
+                            <span className="text-[7px] text-slate-500 uppercase tracking-widest">Concluído</span>
+                          </div>
+                        </div>
+
+                        {/* Right: Legend */}
+                        <div className="col-span-7 space-y-1.5">
+                          <div className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                              <span className="text-slate-400 font-medium">Concluídas</span>
+                            </div>
+                            <span className="font-bold font-mono text-emerald-400">{doneTasksCount}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                              <span className="text-slate-400 font-medium">Em Progresso</span>
+                            </div>
+                            <span className="font-bold font-mono text-blue-400">{inProgressTasksCount}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                              <span className="text-slate-400 font-medium">Atrasadas</span>
+                            </div>
+                            <span className="font-bold font-mono text-red-400">{overdueTasksCount}</span>
+                          </div>
+
+                          <div className="flex items-center justify-between text-[11px]">
+                            <div className="flex items-center space-x-1.5">
+                              <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                              <span className="text-slate-400 font-medium">Pendentes</span>
+                            </div>
+                            <span className="font-bold font-mono text-indigo-400">{pendingTasksCount}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Subtle Footer inside card */}
+                    <div className="text-[9px] text-slate-500 font-mono text-right pt-2 border-t border-slate-800/40 mt-1">
+                      Taxa de vazão de processamento ágil
+                    </div>
+                  </div>
+
                 </div>
-                <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Missões Pendentes</p>
-                  <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-blue-400">
-                    {tasks.filter(t => t.status !== "DONE").length} <span className="text-xs text-slate-400">ativas</span>
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-2">Do To-Do ao Review</p>
-                </div>
-                <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Orçamento Consumido</p>
-                  <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-pink-500">
-                    ${totalSpent.toLocaleString()}
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-2">Limite: $100,000</p>
-                </div>
-                <div className={`p-4 rounded-2xl ${themeStyles.card}`}>
-                  <p className="text-xs text-slate-400 font-bold uppercase tracking-wider">Fator de Vazão</p>
-                  <p className="text-2xl md:text-3xl font-extrabold font-mono mt-1 text-emerald-400">
-                    {tasks.length > 0 ? Math.round((tasks.filter(t => t.status === "DONE").length / tasks.length) * 100) : 0}%
-                  </p>
-                  <p className="text-[10px] text-slate-400 mt-2">Taxa de conclusão geral</p>
-                </div>
-              </div>
 
               {/* COMPACT FULL-WIDTH SYSTEM BOARD */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
@@ -1927,34 +2063,81 @@ export default function App() {
                     {agents.map((agent) => (
                       <div 
                         key={agent.id}
-                        className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+                        className={`p-3 rounded-xl border transition-all flex flex-col gap-2 ${
                           agent.status === "WORKING" 
                             ? "bg-purple-950/15 border-purple-500/40" 
                             : "bg-slate-900/20 border-slate-800/60"
                         }`}
                       >
-                        <div className="flex items-center space-x-3">
-                          <div className={`w-10 h-10 rounded-full bg-gradient-to-tr ${agent.avatarBg} p-[2px] flex-shrink-0`}>
-                            <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center font-bold text-xs text-white">
-                              {agent.name.split(" ").map(n => n[0]).join("").substring(0, 3).toUpperCase()}
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+                          <div className="flex items-center space-x-3">
+                            <motion.div 
+                              className={`w-10 h-10 rounded-full bg-gradient-to-tr ${agent.avatarBg} p-[2px] flex-shrink-0`}
+                              animate={agent.status === "WORKING" ? {
+                                scale: [1, 1.08, 1],
+                                boxShadow: [
+                                  "0 0 0 0px rgba(168, 85, 247, 0.4)",
+                                  "0 0 0 6px rgba(168, 85, 247, 0)",
+                                  "0 0 0 0px rgba(168, 85, 247, 0.4)"
+                                ],
+                              } : {}}
+                              transition={{
+                                duration: 2,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                              }}
+                            >
+                              <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center font-bold text-xs text-white">
+                                {agent.name.split(" ").map(n => n[0]).join("").substring(0, 3).toUpperCase()}
+                              </div>
+                            </motion.div>
+                            <div>
+                              <p className="font-semibold text-sm">{agent.name}</p>
+                              <p className="text-[10px] text-slate-400 font-mono uppercase">{agent.role}</p>
                             </div>
                           </div>
-                          <div>
-                            <p className="font-semibold text-sm">{agent.name}</p>
-                            <p className="text-[10px] text-slate-400 font-mono uppercase">{agent.role}</p>
+
+                          <div className="text-xs max-w-sm text-slate-300 italic hidden md:block truncate">
+                            "{agent.instruction}"
+                          </div>
+
+                          <div className="flex items-center justify-between sm:justify-end gap-3">
+                            <div className="font-mono text-xs">
+                              <span className="text-slate-500">Aloc:</span> ${agent.budget.toLocaleString()}
+                            </div>
+                            <AgentStatusBadge status={agent.status} />
                           </div>
                         </div>
 
-                        <div className="text-xs max-w-sm text-slate-300 italic hidden md:block truncate">
-                          "{agent.instruction}"
-                        </div>
-
-                        <div className="flex items-center justify-between sm:justify-end gap-3">
-                          <div className="font-mono text-xs">
-                            <span className="text-slate-500">Aloc:</span> ${agent.budget.toLocaleString()}
-                          </div>
-                          <AgentStatusBadge status={agent.status} />
-                        </div>
+                        {/* Progress Bar for Workload */}
+                        {(() => {
+                          const agentTasks = tasks.filter(t => t.agentId === agent.id);
+                          const workloadPercent = Math.min(100, (agentTasks.length / 5) * 100);
+                          return (
+                            <div className="pt-2 border-t border-slate-800/40 w-full">
+                              <div className="flex justify-between items-center text-[10px] font-mono text-slate-400 mb-1">
+                                <span>Carga de Trabalho ({agentTasks.length} {agentTasks.length === 1 ? "tarefa" : "tarefas"})</span>
+                                <span className={
+                                  agentTasks.length >= 5 ? "text-red-400 font-bold" :
+                                  agentTasks.length >= 3 ? "text-amber-400" :
+                                  agentTasks.length > 0 ? "text-emerald-400" : "text-slate-500"
+                                }>
+                                  {workloadPercent}%
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-900">
+                                <div 
+                                  className={`h-full transition-all duration-500 rounded-full ${
+                                    agentTasks.length >= 5 ? "bg-gradient-to-r from-red-500 to-pink-500" :
+                                    agentTasks.length >= 3 ? "bg-gradient-to-r from-amber-500 to-orange-500" :
+                                    agentTasks.length > 0 ? "bg-gradient-to-r from-emerald-500 to-teal-500" : "bg-slate-800"
+                                  }`}
+                                  style={{ width: `${workloadPercent}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          );
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -2009,7 +2192,8 @@ export default function App() {
               </div> {/* GRID PRINCIPAL END */}
 
             </div>
-          )}
+          );
+        })()}
 
           {/* LIVE CONSOLE & PAPERCLIP ORCHESTRATOR TAB */}
           {activeTab === "live" && (
@@ -2418,11 +2602,26 @@ export default function App() {
                       <div className="space-y-4">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center space-x-3">
-                            <div className={`w-12 h-12 rounded-full bg-gradient-to-tr ${agent.avatarBg} p-[2px] flex-shrink-0`}>
+                            <motion.div 
+                              className={`w-12 h-12 rounded-full bg-gradient-to-tr ${agent.avatarBg} p-[2px] flex-shrink-0`}
+                              animate={agent.status === "WORKING" ? {
+                                scale: [1, 1.08, 1],
+                                boxShadow: [
+                                  "0 0 0 0px rgba(168, 85, 247, 0.4)",
+                                  "0 0 0 6px rgba(168, 85, 247, 0)",
+                                  "0 0 0 0px rgba(168, 85, 247, 0.4)"
+                                ],
+                              } : {}}
+                              transition={{
+                                duration: 2,
+                                repeat: Infinity,
+                                ease: "easeInOut"
+                              }}
+                            >
                               <div className="w-full h-full rounded-full bg-slate-950 flex items-center justify-center font-bold text-sm text-white">
                                 {agent.name.split(" ").map(n => n[0]).join("").substring(0, 3).toUpperCase()}
                               </div>
-                            </div>
+                            </motion.div>
                             <div>
                               <h3 className="font-bold text-base">{agent.name}</h3>
                               <p className="text-xs text-slate-400 font-mono">{agent.role}</p>
