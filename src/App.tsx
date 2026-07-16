@@ -113,74 +113,103 @@ export default function App() {
   });
 
   // Agents list state
-  const [agents, setAgents] = useState<Agent[]>([
-    {
-      id: "agent-1",
-      name: "Evelyn Rota",
-      role: "CEO & Orchestrator",
-      status: "WORKING",
-      instruction: "Main coordinator of Rota Labs systems, resolving logical bottlenecks.",
-      budget: 5000,
-      avatarBg: "from-purple-600 to-pink-500",
-    },
-    {
-      id: "agent-2",
-      name: "Atlas Bot",
-      role: "Senior Dev",
-      status: "WAKING",
-      instruction: "Rust, TypeScript, and microservices architecture optimization agent.",
-      budget: 3500,
-      avatarBg: "from-blue-600 to-indigo-500",
-    },
-    {
-      id: "agent-3",
-      name: "Nova Pen",
-      role: "Copywriter & Marketing",
-      status: "SLEEPING",
-      instruction: "Specialist in highly persuasive copy, SEO optimization, and viral campaign scripts.",
-      budget: 2000,
-      avatarBg: "from-pink-500 to-rose-400",
+  const [agents, setAgents] = useState<Agent[]>(() => {
+    const saved = localStorage.getItem("rota_labs_agents");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing agents from localStorage", e);
+      }
     }
-  ]);
+    return [
+      {
+        id: "agent-1",
+        name: "Evelyn Rota",
+        role: "CEO & Orchestrator",
+        status: "WORKING",
+        instruction: "Main coordinator of Rota Labs systems, resolving logical bottlenecks.",
+        budget: 5000,
+        avatarBg: "from-purple-600 to-pink-500",
+      },
+      {
+        id: "agent-2",
+        name: "Atlas Bot",
+        role: "Senior Dev",
+        status: "WAKING",
+        instruction: "Rust, TypeScript, and microservices architecture optimization agent.",
+        budget: 3500,
+        avatarBg: "from-blue-600 to-indigo-500",
+      },
+      {
+        id: "agent-3",
+        name: "Nova Pen",
+        role: "Copywriter & Marketing",
+        status: "SLEEPING",
+        instruction: "Specialist in highly persuasive copy, SEO optimization, and viral campaign scripts.",
+        budget: 2000,
+        avatarBg: "from-pink-500 to-rose-400",
+      }
+    ];
+  });
 
   // Tasks board state
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: "task-1",
-      title: "Refactor Auth Module for V3 Microservices",
-      agentId: "agent-2",
-      priority: "HIGH",
-      status: "TO_DO",
-    },
-    {
-      id: "task-2",
-      title: "Integrate Stripe Webhooks with local retry loop",
-      agentId: "agent-2",
-      priority: "MEDIUM",
-      status: "TO_DO",
-    },
-    {
-      id: "task-3",
-      title: "SEO Optimization & Content Marketing Copy kit",
-      agentId: "agent-3",
-      priority: "URGENT",
-      status: "IN_PROGRESS",
-    },
-    {
-      id: "task-4",
-      title: "Dockerize Core Orchestrator Agents for deployment",
-      agentId: "agent-1",
-      priority: "HIGH",
-      status: "DONE",
-    },
-    {
-      id: "task-5",
-      title: "Write interactive simulation schemas",
-      agentId: "agent-1",
-      priority: "LOW",
-      status: "REVIEW",
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    const saved = localStorage.getItem("rota_labs_tasks");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing tasks from localStorage", e);
+      }
     }
-  ]);
+    return [
+      {
+        id: "task-1",
+        title: "Refactor Auth Module for V3 Microservices",
+        agentId: "agent-2",
+        priority: "HIGH",
+        status: "TO_DO",
+      },
+      {
+        id: "task-2",
+        title: "Integrate Stripe Webhooks with local retry loop",
+        agentId: "agent-2",
+        priority: "MEDIUM",
+        status: "TO_DO",
+      },
+      {
+        id: "task-3",
+        title: "SEO Optimization & Content Marketing Copy kit",
+        agentId: "agent-3",
+        priority: "URGENT",
+        status: "IN_PROGRESS",
+      },
+      {
+        id: "task-4",
+        title: "Dockerize Core Orchestrator Agents for deployment",
+        agentId: "agent-1",
+        priority: "HIGH",
+        status: "DONE",
+      },
+      {
+        id: "task-5",
+        title: "Write interactive simulation schemas",
+        agentId: "agent-1",
+        priority: "LOW",
+        status: "REVIEW",
+      }
+    ];
+  });
+
+  // Automatic persistence in localStorage
+  useEffect(() => {
+    localStorage.setItem("rota_labs_agents", JSON.stringify(agents));
+  }, [agents]);
+
+  useEffect(() => {
+    localStorage.setItem("rota_labs_tasks", JSON.stringify(tasks));
+  }, [tasks]);
 
   // Histórico de missões concluídas por agent ao longo do tempo (Dados do gráfico de linhas)
   const [performanceData, setPerformanceData] = useState([
