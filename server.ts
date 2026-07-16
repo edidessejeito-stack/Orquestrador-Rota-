@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import { eq } from "drizzle-orm";
 
@@ -9,9 +8,6 @@ import { db } from "./src/db/index.ts";
 import { users, agents, tasks } from "./src/db/schema.ts";
 import { getOrCreateUser } from "./src/db/users.ts";
 import { requireAuth, AuthRequest } from "./src/middleware/auth.ts";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();
