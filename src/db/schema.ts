@@ -34,6 +34,7 @@ export const tasks = pgTable('tasks', {
   agentId: text('agent_id').notNull(), // References an agent id string
   priority: text('priority').notNull(), // HIGH, MEDIUM, LOW, etc.
   status: text('status').notNull(), // TO_DO, IN_PROGRESS, REVIEW, DONE
+  dueDate: text('due_date'), // Optional due date formatted as YYYY-MM-DD
   createdAt: timestamp('created_at').defaultNow(),
 });
 

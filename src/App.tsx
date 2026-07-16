@@ -45,7 +45,8 @@ import {
   Cloud,
   CloudLightning,
   CloudOff,
-  Search
+  Search,
+  Calendar
 } from "lucide-react";
 
 import { auth, googleAuthProvider, signInWithPopup, signOut } from "./lib/firebase.ts";
@@ -73,6 +74,7 @@ interface Task {
   agentId: string;
   priority: Priority;
   status: TaskStatus;
+  dueDate?: string; // Optional due date formatted as YYYY-MM-DD
 }
 
 interface LogEntry {
@@ -119,6 +121,7 @@ export default function App() {
     agentId: "",
     priority: "MEDIUM" as Priority,
     status: "TO_DO" as TaskStatus,
+    dueDate: "",
   });
 
   // Firebase Auth and Database Sync States
@@ -632,6 +635,7 @@ export default function App() {
       agentId: taskForm.agentId || agents[0]?.id || "agent-1",
       priority: taskForm.priority,
       status: taskForm.status,
+      dueDate: taskForm.dueDate || "",
     };
 
     setTasks((prev) => [...prev, newTask]);
@@ -654,6 +658,7 @@ export default function App() {
       agentId: "",
       priority: "MEDIUM",
       status: "TO_DO",
+      dueDate: "",
     });
     setIsCreateTaskOpen(false);
   };
@@ -3214,18 +3219,30 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="block font-bold text-slate-300">Coluna Inicial</label>
-                  <select
-                    value={taskForm.status}
-                    onChange={(e) => setTaskForm({...taskForm, status: e.target.value as TaskStatus})}
-                    className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none"
-                  >
-                    <option value="TO_DO">A Fazer</option>
-                    <option value="IN_PROGRESS">Em Progresso</option>
-                    <option value="REVIEW">Revisão</option>
-                    <option value="DONE">Concluído</option>
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="block font-bold text-slate-300">Coluna Inicial</label>
+                    <select
+                      value={taskForm.status}
+                      onChange={(e) => setTaskForm({...taskForm, status: e.target.value as TaskStatus})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
+                    >
+                      <option value="TO_DO">A Fazer</option>
+                      <option value="IN_PROGRESS">Em Progresso</option>
+                      <option value="REVIEW">Revisão</option>
+                      <option value="DONE">Concluído</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block font-bold text-slate-300">Prazo (Due Date)</label>
+                    <input
+                      type="date"
+                      value={taskForm.dueDate}
+                      onChange={(e) => setTaskForm({...taskForm, dueDate: e.target.value})}
+                      className="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white outline-none focus:border-purple-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-end space-x-3 pt-3">
@@ -3389,6 +3406,14 @@ function TaskCard({
 }: TaskCardProps) {
   const responsibleAgent = agents.find(a => a.id === task.agentId);
 
+  const isOverdue = (() => {
+    if (!task.dueDate || task.status === "DONE") return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const due = new Date(task.dueDate + "T00:00:00");
+    return due < today;
+  })();
+
   const getPriorityBadge = (p: Priority) => {
     switch (p) {
       case "LOW":
@@ -3416,9 +3441,11 @@ function TaskCard({
       } ${
         isHovered ? "border-indigo-500 bg-indigo-950/20 scale-[1.02] shadow-[0_0_15px_rgba(124,58,237,0.15)]" : ""
       } ${
-        task.status === "IN_PROGRESS" && !isDragged && !isHovered
-          ? "bg-indigo-950/15 border-[#7C3AED]/40 shadow-[inset_0_0_15px_rgba(124,58,237,0.05)]" 
-          : !isDragged && !isHovered ? "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80" : ""
+        isOverdue && !isDragged && !isHovered
+          ? "bg-red-950/10 border-red-500/40 shadow-[0_0_15px_rgba(239,68,68,0.1)] hover:border-red-500/60"
+          : task.status === "IN_PROGRESS" && !isDragged && !isHovered
+            ? "bg-indigo-950/15 border-[#7C3AED]/40 shadow-[inset_0_0_15px_rgba(124,58,237,0.05)]" 
+            : !isDragged && !isHovered ? "bg-slate-900/60 border-slate-800/80 hover:border-slate-700/80" : ""
       }`}
     >
       
@@ -3438,6 +3465,23 @@ function TaskCard({
       </div>
 
       <p className="text-xs font-semibold leading-relaxed mb-3 select-none">{task.title}</p>
+
+      {/* Due Date Indicator */}
+      {task.dueDate && (
+        <div className="mt-2 mb-3 flex items-center justify-between text-[10px] font-mono select-none">
+          <div className="flex items-center space-x-1.5">
+            <Calendar className={`w-3.5 h-3.5 ${isOverdue ? "text-red-400 animate-pulse" : "text-slate-500"}`} />
+            <span className={isOverdue ? "text-red-400 font-bold" : "text-slate-400"}>
+              Prazo: {task.dueDate.split("-").reverse().join("/")}
+            </span>
+          </div>
+          {isOverdue && (
+            <span className="text-[9px] bg-red-500/20 border border-red-500/45 text-red-400 px-1.5 py-0.5 rounded font-extrabold tracking-wide uppercase animate-pulse">
+              Atrasada
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Agent details */}
       <div className="flex items-center justify-between pt-2.5 border-t border-slate-800/60 text-[11px] select-none">

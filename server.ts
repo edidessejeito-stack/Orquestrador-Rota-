@@ -79,6 +79,7 @@ async function startServer() {
             agentId: "agent-2",
             priority: "HIGH",
             status: "TO_DO",
+            dueDate: "2026-07-14", // Past date (overdue)
           },
           {
             id: "task-2",
@@ -87,6 +88,7 @@ async function startServer() {
             agentId: "agent-2",
             priority: "MEDIUM",
             status: "TO_DO",
+            dueDate: "2026-07-22", // Future date
           },
           {
             id: "task-3",
@@ -95,6 +97,7 @@ async function startServer() {
             agentId: "agent-3",
             priority: "URGENT",
             status: "IN_PROGRESS",
+            dueDate: "2026-07-25", // Future date
           },
           {
             id: "task-4",
@@ -103,6 +106,7 @@ async function startServer() {
             agentId: "agent-1",
             priority: "HIGH",
             status: "DONE",
+            dueDate: "2026-07-12", // Completed task
           },
           {
             id: "task-5",
@@ -111,6 +115,7 @@ async function startServer() {
             agentId: "agent-1",
             priority: "LOW",
             status: "REVIEW",
+            dueDate: "", // No due date
           }
         ];
 
@@ -180,6 +185,7 @@ async function startServer() {
             agentId: task.agentId,
             priority: task.priority,
             status: task.status,
+            dueDate: task.dueDate || null,
           }));
           await tx.insert(tasks).values(tasksToInsert);
         }
