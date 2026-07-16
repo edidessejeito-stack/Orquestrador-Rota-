@@ -44,7 +44,8 @@ import {
   LogIn,
   Cloud,
   CloudLightning,
-  CloudOff
+  CloudOff,
+  Search
 } from "lucide-react";
 
 import { auth, googleAuthProvider, signInWithPopup, signOut } from "./lib/firebase.ts";
@@ -289,6 +290,21 @@ export default function App() {
   const [terminalInput, setTerminalInput] = useState("");
   const terminalBottomRef = useRef<HTMLDivElement>(null);
   const bottomTerminalBottomRef = useRef<HTMLDivElement>(null);
+
+  // Search filter state for Kanban board
+  const [searchTerm, setSearchTerm] = useState("");
+
+  // Computed filtered tasks list for Kanban active missions
+  const filteredTasks = tasks.filter(t => {
+    if (!searchTerm.trim()) return true;
+    const lowerSearch = searchTerm.toLowerCase();
+    const matchesTitle = t.title.toLowerCase().includes(lowerSearch);
+    const agent = agents.find(a => a.id === t.agentId);
+    const matchesAgent = agent 
+      ? agent.name.toLowerCase().includes(lowerSearch) || agent.role.toLowerCase().includes(lowerSearch) 
+      : false;
+    return matchesTitle || matchesAgent;
+  });
 
   // Drag and Drop States and Handlers
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -1591,6 +1607,37 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* SEARCH FILTER BAR */}
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-slate-900/40 p-3 rounded-xl border border-slate-800/60">
+                  <div className="relative flex-1 max-w-md">
+                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-500">
+                      <Search className="w-4 h-4" />
+                    </span>
+                    <input
+                      type="text"
+                      placeholder="Filtrar missões por título ou agente responsável..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-950/60 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500/80 focus:ring-1 focus:ring-indigo-500/80 transition-all"
+                    />
+                    {searchTerm && (
+                      <button
+                        onClick={() => setSearchTerm("")}
+                        className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500 hover:text-indigo-400 text-xs font-bold transition-all"
+                      >
+                        Limpar
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2 text-[11px] text-slate-400 font-mono">
+                    <span>Mapeando:</span>
+                    <span className="text-indigo-400 font-bold">{filteredTasks.length}</span>
+                    <span>de</span>
+                    <span className="text-slate-300 font-bold">{tasks.length}</span>
+                    <span>missões ativas</span>
+                  </div>
+                </div>
+
                 {/* KANBAN GRID */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   
@@ -1601,7 +1648,7 @@ export default function App() {
                         <span className="w-2 h-2 rounded-full bg-slate-500 mr-2"></span> A Fazer
                       </span>
                       <span className="px-2 py-0.5 bg-slate-800 rounded text-white text-[10px]">
-                        {tasks.filter(t => t.status === "TO_DO").length}
+                        {filteredTasks.filter(t => t.status === "TO_DO").length}
                       </span>
                     </div>
 
@@ -1616,7 +1663,7 @@ export default function App() {
                       }`}
                     >
                       <AnimatePresence mode="popLayout">
-                        {tasks.filter(t => t.status === "TO_DO").length === 0 ? (
+                        {filteredTasks.filter(t => t.status === "TO_DO").length === 0 ? (
                           <motion.p
                             key="empty-todo"
                             initial={{ opacity: 0 }}
@@ -1624,10 +1671,10 @@ export default function App() {
                             exit={{ opacity: 0 }}
                             className="text-xs text-slate-500 text-center py-10 italic w-full"
                           >
-                            Nenhuma missão no momento
+                            Nenhuma missão correspondente
                           </motion.p>
                         ) : (
-                          tasks.filter(t => t.status === "TO_DO").map(t => (
+                          filteredTasks.filter(t => t.status === "TO_DO").map(t => (
                             <motion.div
                               key={t.id}
                               layout
@@ -1665,7 +1712,7 @@ export default function App() {
                         <span className="w-2 h-2 rounded-full bg-blue-500 mr-2 animate-ping"></span> Em Progresso
                       </span>
                       <span className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded text-[10px]">
-                        {tasks.filter(t => t.status === "IN_PROGRESS").length}
+                        {filteredTasks.filter(t => t.status === "IN_PROGRESS").length}
                       </span>
                     </div>
 
@@ -1680,7 +1727,7 @@ export default function App() {
                       }`}
                     >
                       <AnimatePresence mode="popLayout">
-                        {tasks.filter(t => t.status === "IN_PROGRESS").length === 0 ? (
+                        {filteredTasks.filter(t => t.status === "IN_PROGRESS").length === 0 ? (
                           <motion.p
                             key="empty-inprogress"
                             initial={{ opacity: 0 }}
@@ -1688,10 +1735,10 @@ export default function App() {
                             exit={{ opacity: 0 }}
                             className="text-xs text-slate-500 text-center py-10 italic w-full"
                           >
-                            Nenhum agente executando agora
+                            Nenhuma missão correspondente
                           </motion.p>
                         ) : (
-                          tasks.filter(t => t.status === "IN_PROGRESS").map(t => (
+                          filteredTasks.filter(t => t.status === "IN_PROGRESS").map(t => (
                             <motion.div
                               key={t.id}
                               layout
@@ -1729,7 +1776,7 @@ export default function App() {
                         <span className="w-2 h-2 rounded-full bg-purple-500 mr-2"></span> Revisão
                       </span>
                       <span className="px-2 py-0.5 bg-purple-500/10 text-purple-400 border border-purple-500/20 rounded text-[10px]">
-                        {tasks.filter(t => t.status === "REVIEW").length}
+                        {filteredTasks.filter(t => t.status === "REVIEW").length}
                       </span>
                     </div>
 
@@ -1744,7 +1791,7 @@ export default function App() {
                       }`}
                     >
                       <AnimatePresence mode="popLayout">
-                        {tasks.filter(t => t.status === "REVIEW").length === 0 ? (
+                        {filteredTasks.filter(t => t.status === "REVIEW").length === 0 ? (
                           <motion.p
                             key="empty-review"
                             initial={{ opacity: 0 }}
@@ -1752,10 +1799,10 @@ export default function App() {
                             exit={{ opacity: 0 }}
                             className="text-xs text-slate-500 text-center py-10 italic w-full"
                           >
-                            Nenhum aguardando aprovação
+                            Nenhuma missão correspondente
                           </motion.p>
                         ) : (
-                          tasks.filter(t => t.status === "REVIEW").map(t => (
+                          filteredTasks.filter(t => t.status === "REVIEW").map(t => (
                             <motion.div
                               key={t.id}
                               layout
@@ -1793,7 +1840,7 @@ export default function App() {
                         <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Concluído
                       </span>
                       <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded text-[10px]">
-                        {tasks.filter(t => t.status === "DONE").length}
+                        {filteredTasks.filter(t => t.status === "DONE").length}
                       </span>
                     </div>
 
@@ -1808,7 +1855,7 @@ export default function App() {
                       }`}
                     >
                       <AnimatePresence mode="popLayout">
-                        {tasks.filter(t => t.status === "DONE").length === 0 ? (
+                        {filteredTasks.filter(t => t.status === "DONE").length === 0 ? (
                           <motion.p
                             key="empty-done"
                             initial={{ opacity: 0 }}
@@ -1816,10 +1863,10 @@ export default function App() {
                             exit={{ opacity: 0 }}
                             className="text-xs text-slate-500 text-center py-10 italic w-full"
                           >
-                            Nenhuma missão finalizada ainda
+                            Nenhuma missão correspondente
                           </motion.p>
                         ) : (
-                          tasks.filter(t => t.status === "DONE").map(t => (
+                          filteredTasks.filter(t => t.status === "DONE").map(t => (
                             <motion.div
                               key={t.id}
                               layout
