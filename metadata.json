@@ -1,5 +1,5 @@
 {
-  "name": "Rota Labs Orchestrator",
+  "name": "Rota Labs Board",
   "description": "Painel de controle e orquestração de agentes de IA de última geração para a Rota Labs.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
